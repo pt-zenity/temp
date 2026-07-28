@@ -70,3 +70,26 @@ deployment used for tempfile.xyz.
   git-ignored. Back it up if you need upload history beyond what's in S3.
 - Never commit `.env` — it holds your S3 secret key. Only `.env.example` is
   tracked in git.
+
+## Admin panel API
+
+Mounted at `/api/admin/*` (see `src/admin.js`). All routes except `/login`
+require a valid session (httpOnly JWT cookie, or `Authorization: Bearer`).
+
+- `POST /api/admin/login` — `{ username, password }` → sets session cookie. Rate-limited (10/15min/IP).
+- `POST /api/admin/logout`
+- `GET /api/admin/me` — current session's username.
+- `POST /api/admin/change-password` — `{ newPassword }` (min 8 chars).
+- `GET /api/admin/stats` — upload counts/bytes (total, 24h, 7d), downloads, by-type breakdown, 14-day daily trend.
+- `GET /api/admin/system` — live CPU %, load average, memory, disk, uptime, Node version.
+- `GET /api/admin/s3-usage` — real object count + bytes queried live from the S3 bucket (not just local DB).
+- `GET /api/admin/files?page=&pageSize=&status=all|active|expired&search=` — paginated file listing.
+- `DELETE /api/admin/files/:id` — deletes the S3 object + marks it deleted in SQLite immediately (revokes access).
+- `GET /api/admin/activity?page=&pageSize=` — audit log of logins, uploads, deletions, password changes.
+
+Admin accounts live in the `admin_users` SQLite table (bcrypt-hashed
+passwords). The first account is bootstrapped from `ADMIN_USERNAME` /
+`ADMIN_PASSWORD` env vars the first time the server ever starts (i.e. when
+that table is empty) — see `.env.example`. Change the password from the
+panel's Settings page afterwards; the env password is not re-read once an
+account exists.

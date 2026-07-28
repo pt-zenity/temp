@@ -2,11 +2,15 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import { nanoid } from 'nanoid';
 
-import { insertUpload, getUploadById } from './src/db.js';
+import { insertUpload, getUploadById, incrementDownloadCount, logActivity } from './src/db.js';
 import { buildKey, putObject, checkBucketAccess, getObject } from './src/s3.js';
 import { startCleanupLoop } from './src/cleanup.js';
+import { ensureBootstrapAdmin } from './src/auth.js';
+import { adminRouter } from './src/admin.js';
 
 const PORT = Number(process.env.PORT || 3001);
 const DEFAULT_EXPIRE_SECONDS = Number(process.env.DEFAULT_EXPIRE_SECONDS || 3600);
@@ -24,8 +28,22 @@ app.set('trust proxy', true);
 app.use(
     cors({
         origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(',').map((s) => s.trim()),
+        credentials: true,
     })
 );
+app.use(express.json());
+app.use(cookieParser());
+
+// Basic protection against abuse on the public upload endpoint - generous
+// enough for legitimate use (this is a public anonymous upload tool) but
+// stops a single client from hammering the API / S3 bucket.
+const uploadLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 'error', message: 'Too many uploads from this IP. Please slow down.' },
+});
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -36,11 +54,16 @@ app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
 });
 
+// ── Admin panel API (auth, stats, file management, system health) ────────
+// Mounted at /api/admin/*; the router itself enforces authentication on
+// every route except /login.
+app.use('/api/admin', adminRouter);
+
 // ── Upload ────────────────────────────────────────────────────────────────
 // Kept response-shape compatible with the previous tmpfiles.org integration
 // ({"status":"success","data":{"url": "..."}}) so the existing Vue frontend
 // (App.vue / FileCard.vue) needs no changes beyond pointing at this URL.
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', uploadLimiter, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ status: 'error', message: 'No file provided (field name must be "file").' });
@@ -75,7 +98,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
             size: req.file.size,
             createdAt: now.toISOString(),
             expiresAt: expiresAt.toISOString(),
+            uploaderIp: req.ip,
         });
+        logActivity({ actor: 'public', action: 'file_uploaded', target: id, detail: req.file.originalname, ip: req.ip });
 
         const baseUrl = `${req.protocol}://${req.get('host')}`;
 
@@ -153,6 +178,8 @@ async function streamFile(req, res, { forceDownload }) {
         // Short cache is fine since each id is immutable content until it expires.
         res.setHeader('Cache-Control', 'private, max-age=60');
 
+        incrementDownloadCount(row.id, new Date().toISOString());
+
         const body = object.Body;
         if (body && typeof body.pipe === 'function') {
             body.on('error', (err) => {
@@ -180,6 +207,13 @@ async function main() {
         console.log('[startup] S3 bucket access verified.');
     } catch (err) {
         console.error('[startup] FAILED to access S3 bucket. Check .env configuration.', err);
+        process.exit(1);
+    }
+
+    try {
+        ensureBootstrapAdmin();
+    } catch (err) {
+        console.error('[startup] FAILED to set up admin account:', err.message);
         process.exit(1);
     }
 

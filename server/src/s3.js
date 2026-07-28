@@ -1,4 +1,11 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+import {
+    S3Client,
+    PutObjectCommand,
+    DeleteObjectCommand,
+    GetObjectCommand,
+    HeadBucketCommand,
+    ListObjectsV2Command,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const {
@@ -74,4 +81,30 @@ export async function getPresignedDownloadUrl(key, { expiresInSeconds = 3600, fi
 // self-hosted from the visitor's point of view.
 export async function getObject(key) {
     return s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+}
+
+// Sums the size of every object under our own prefix in the (possibly
+// shared) bucket, for the admin panel's "actual S3 usage" metric. Paginates
+// through ListObjectsV2 in case there are many objects.
+export async function getBucketUsage() {
+    let continuationToken;
+    let totalBytes = 0;
+    let objectCount = 0;
+
+    do {
+        const res = await s3.send(
+            new ListObjectsV2Command({
+                Bucket: BUCKET,
+                Prefix: PREFIX,
+                ContinuationToken: continuationToken,
+            })
+        );
+        for (const obj of res.Contents || []) {
+            totalBytes += obj.Size || 0;
+            objectCount += 1;
+        }
+        continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return { totalBytes, objectCount, bucket: BUCKET, prefix: PREFIX };
 }

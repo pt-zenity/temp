@@ -67,6 +67,34 @@ it must be created/updated manually on the VPS the first time (or whenever
 S3 credentials or other backend config changes), based on
 `server/.env.example`.
 
+## Admin panel
+
+A full admin panel lives at `/admin` (e.g. `https://tempfile.xyz/admin`),
+protected by a username/password login (bcrypt + JWT session cookie).
+
+Required `.env` additions on top of the S3 config above:
+
+```
+NODE_ENV=production
+ADMIN_JWT_SECRET=<long random hex, e.g. via:
+  node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=<strong password - only used to bootstrap the FIRST admin
+  account; ignored afterwards, change the password from inside the panel>
+```
+
+**These vars must be added to `/opt/tmpfup-backend/.env` manually** —
+`deploy.sh` never touches `.env`. If the backend fails to start after a
+fresh deploy, check `journalctl -u tmpfup-backend.service` first; a missing
+`ADMIN_JWT_SECRET` or `ADMIN_PASSWORD` (on first boot) will make it exit
+immediately.
+
+Panel features: live CPU/RAM/disk + Node uptime, real S3 bucket usage
+(queried live from Neo.id NOS, not just local DB), upload trend chart,
+file-type breakdown, paginated/searchable file manager with manual delete,
+and a full activity log (logins, uploads, deletions, password changes).
+See `server/README.md` for the full admin API reference.
+
 ## DNS
 
 `tempfile.xyz` was registered 2026-07-28 via Hostinger, using Cloudflare
