@@ -18,12 +18,16 @@ const FilePond = vueFilePond(FilePondPluginImagePreview, FilePondPluginFileValid
 const cookies = inject<VueCookies>('$cookies')!;
 const nanoid = customAlphabet('0123456789abcdef', 8);
 
-// tmpfiles.org allows up to 100 MiB per upload (binary, 1024-based).
-// Passing a raw byte count here avoids FilePond's "100MB" string being
-// parsed with a 1000-based multiplier (100,000,000 bytes), which was
-// ~4.86 MB smaller than what the server actually accepts and caused
-// valid files to be rejected client-side before upload.
+// Self-hosted backend (see /server) enforces the real limit server-side via
+// MAX_FILE_SIZE_BYTES in its .env. Passing a raw byte count here (rather
+// than a "100MB" string) avoids FilePond's string parser applying a
+// 1000-based multiplier that would silently under-report the real limit.
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 104,857,600 bytes (100 MiB)
+
+// Same-origin API path. Nginx proxies /api/* and /f/* to the Node backend
+// (see deploy/nginx-tempfile.xyz.conf), so this works both in dev
+// (via Vite's proxy, see vite.config.ts) and in production.
+const UPLOAD_ENDPOINT = '/api/upload';
 const files = reactive<
     {
         url: string;
@@ -85,7 +89,7 @@ onMounted(() => {
                         :allow-revert="false"
                         :max-file-size="MAX_FILE_SIZE_BYTES"
                         accepted-file-types="*"
-                        server="https://tmpfiles.org/api/v1/upload"
+                        :server="UPLOAD_ENDPOINT"
                         :instant-upload="false"
                         @processfile="processFile"
                         class="p-12"

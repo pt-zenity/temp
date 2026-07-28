@@ -1,26 +1,71 @@
 # Deployment: tempfile.xyz on VPS (103.253.27.32)
 
-This app is deployed as a **static build** served directly by **nginx** on
-the VPS, rather than via `vite preview` (which is a dev-only server, not
-meant for production).
+This app is now **fully self-hosted**, consisting of two deployed pieces:
+
+1. **Frontend** — a static Vue build served directly by **nginx** (not via
+   `vite preview`, which is a dev-only server, not meant for production).
+2. **Backend** — a Node.js/Express API (`server/`) running as a permanent
+   **systemd service**, which handles file uploads and stores them in an
+   **S3-compatible bucket** (Neo.id NOS) instead of any third-party upload
+   API. Nginx reverse-proxies `/api/`, `/f/`, and `/dl/` to this backend.
+
+```
+Browser ── https://tempfile.xyz ──▶ nginx
+                                     ├─ static files (SPA) ──▶ /var/www/tempfile.xyz/
+                                     └─ /api/, /f/, /dl/ ──▶ 127.0.0.1:3001 (Node/Express)
+                                                                   │
+                                                                   ├─ SQLite (upload metadata + TTL)
+                                                                   └─ S3-compatible bucket (Neo.id NOS)
+```
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `/var/www/tempfile.xyz/` | Web root — synced from `dist/` after each build |
-| `/etc/nginx/sites-available/tempfile.xyz` | Nginx vhost config (copy in `deploy/nginx-tempfile.xyz.conf`) |
+| `/opt/tmpfup-backend/` | Backend deployment — synced from `server/` (excludes `node_modules`, `data/`, `.env`); real `.env` lives only here, never in git |
+| `/etc/systemd/system/tmpfup-backend.service` | Runs the backend permanently, auto-restarts on crash/reboot (copy in `deploy/tmpfup-backend.service`) |
+| `/etc/nginx/sites-available/tempfile.xyz` | Nginx vhost config — serves the SPA and proxies `/api/`, `/f/`, `/dl/` to the backend (copy in `deploy/nginx-tempfile.xyz.conf`) |
 | `/usr/local/bin/setup-ssl-tempfile.sh` | One-shot Let's Encrypt cert issuance (copy in `deploy/setup-ssl-tempfile.sh`) |
-| `/etc/systemd/system/tempfile-ssl-retry.{service,timer}` | Auto-retries cert issuance every 15 min until DNS propagates, then self-disables |
+| `/etc/systemd/system/tempfile-ssl-retry.{service,timer}` | Auto-retries cert issuance every 15 min until DNS propagates, then self-disables (disabled now that the cert is live) |
+
+## S3 storage backend
+
+Uploaded files are stored in an S3-compatible bucket rather than on local
+disk, so the app has no growing local storage footprint and can scale
+independently of the VPS disk:
+
+| Setting | Value |
+|---|---|
+| Endpoint | `https://nos.jkt-1.neo.id` (Neo.id NOS, S3-compatible) |
+| Region | `jkt-1` |
+| Bucket | `zti` (⚠️ shared with other unrelated apps/backups on this VPS) |
+| Key prefix | `tmpfup/` (keeps this app's objects isolated inside the shared bucket) |
+| Access mode | Bucket is **private**; downloads are served via short-lived (5 min) presigned URLs generated on demand — never made public |
+
+Real credentials live only in `/opt/tmpfup-backend/.env` (and locally in
+`server/.env` for dev) — both are gitignored and must never be committed.
+See `server/.env.example` for the full list of configuration options
+(expiry limits, max file size, cleanup interval, etc.) and `server/README.md`
+for backend API details.
 
 ## Redeploying after code changes
 
 ```bash
-bash deploy/deploy.sh
+bash deploy/deploy.sh              # deploys frontend AND backend
+bash deploy/deploy.sh --skip-backend   # frontend only (faster, e.g. UI-only changes)
 ```
 
 This runs `npm run build`, rsyncs `dist/` to `/var/www/tempfile.xyz/`, and
-reloads nginx.
+reloads nginx. Unless `--skip-backend` is passed, it also rsyncs `server/`
+to `/opt/tmpfup-backend/` (excluding `node_modules`, `data/`, `.env`),
+runs `npm install --omit=dev` there, and restarts
+`tmpfup-backend.service` via systemd.
+
+**Note:** `/opt/tmpfup-backend/.env` is never overwritten by this script —
+it must be created/updated manually on the VPS the first time (or whenever
+S3 credentials or other backend config changes), based on
+`server/.env.example`.
 
 ## DNS
 

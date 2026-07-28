@@ -1,0 +1,22 @@
+[Unit]
+Description=/tmp/fup self-hosted backend (S3 upload + expiry API)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tmpfup-backend
+ExecStart=/usr/bin/node /opt/tmpfup-backend/index.js
+Restart=always
+RestartSec=3
+User=root
+Environment=NODE_ENV=production
+
+# Basic hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=append:/var/log/tmpfup-backend.log
+StandardError=append:/var/log/tmpfup-backend.error.log
+
+[Install]
+WantedBy=multi-user.target
