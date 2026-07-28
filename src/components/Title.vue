@@ -12,7 +12,7 @@
                 <br />
                 Files automatically deleted after 1 hour.
             </p>
-            <p class="text-sm line-clamp-2">Maximum file size is 100MB.</p>
+            <p class="text-sm line-clamp-2">Maximum file size is 100 MiB (104,857,600 bytes).</p>
         </div>
     </div>
 </template>

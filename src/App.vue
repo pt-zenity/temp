@@ -17,6 +17,13 @@ import FileCard from './components/FileCard.vue';
 const FilePond = vueFilePond(FilePondPluginImagePreview, FilePondPluginFileValidateSize);
 const cookies = inject<VueCookies>('$cookies')!;
 const nanoid = customAlphabet('0123456789abcdef', 8);
+
+// tmpfiles.org allows up to 100 MiB per upload (binary, 1024-based).
+// Passing a raw byte count here avoids FilePond's "100MB" string being
+// parsed with a 1000-based multiplier (100,000,000 bytes), which was
+// ~4.86 MB smaller than what the server actually accepts and caused
+// valid files to be rejected client-side before upload.
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 104,857,600 bytes (100 MiB)
 const files = reactive<
     {
         url: string;
@@ -76,7 +83,7 @@ onMounted(() => {
                         :allow-browse="true"
                         :allow-remove="true"
                         :allow-revert="false"
-                        max-file-size="100MB"
+                        :max-file-size="MAX_FILE_SIZE_BYTES"
                         accepted-file-types="*"
                         server="https://tmpfiles.org/api/v1/upload"
                         :instant-upload="false"
