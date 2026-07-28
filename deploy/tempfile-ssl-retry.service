@@ -1,0 +1,6 @@
+[Unit]
+Description=One-shot retry to obtain SSL cert for tempfile.xyz once DNS propagates
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c '/usr/local/bin/setup-ssl-tempfile.sh && systemctl disable --now tempfile-ssl-retry.timer'
