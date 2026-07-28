@@ -13,10 +13,13 @@ itself.
   compatible with the old tmpfiles.org response
   (`{"status":"success","data":{"url": "..."}}`) so the frontend needs no
   special-casing.
-- `GET /f/:id` — 302-redirects to a short-lived (5 min) presigned S3 URL for
-  inline viewing.
-- `GET /dl/f/:id` — same, but forces `Content-Disposition: attachment` so the
-  browser downloads instead of rendering inline.
+- `GET /f/:id` — fetches the object from S3 and **streams it directly**
+  through this backend for inline viewing. The client only ever talks to
+  tempfile.xyz; the S3/NOS endpoint and credentials are never exposed to
+  the browser (no redirect to a presigned S3 URL).
+- `GET /dl/f/:id` — same streaming behaviour, but sends
+  `Content-Disposition: attachment` so the browser downloads instead of
+  rendering inline.
 - `GET /api/files/:id` — JSON metadata for an upload (name, type, size,
   created/expires timestamps).
 - `GET /api/health` — trivial health check.
@@ -58,8 +61,11 @@ deployment used for tempfile.xyz.
 
 ## Data & security notes
 
-- The S3 bucket does **not** need to be public — files are only reachable
-  through this backend's presigned-URL redirect, which expires in 5 minutes.
+- The S3 bucket does **not** need to be public. `/f/:id` and `/dl/f/:id`
+  fetch the object with the backend's own S3 credentials and stream the
+  bytes straight to the client — the bucket, endpoint, and credentials stay
+  entirely server-side and are never visible to the browser (no S3 URLs are
+  ever exposed, presigned or otherwise).
 - `data/uploads.sqlite` (the metadata DB) is local to this backend and is
   git-ignored. Back it up if you need upload history beyond what's in S3.
 - Never commit `.env` — it holds your S3 secret key. Only `.env.example` is

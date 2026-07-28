@@ -5,7 +5,7 @@ import multer from 'multer';
 import { nanoid } from 'nanoid';
 
 import { insertUpload, getUploadById } from './src/db.js';
-import { buildKey, putObject, checkBucketAccess, getPresignedDownloadUrl } from './src/s3.js';
+import { buildKey, putObject, checkBucketAccess, getObject } from './src/s3.js';
 import { startCleanupLoop } from './src/cleanup.js';
 
 const PORT = Number(process.env.PORT || 3001);
@@ -118,7 +118,7 @@ app.get('/api/files/:id', (req, res) => {
 // ── View (inline) ───────────────────────────────────────────────────────
 // Mirrors the previous "https://tmpfiles.org/{id}/{name}" viewer link.
 app.get('/f/:id', async (req, res) => {
-    await redirectToPresigned(req, res, { forceDownload: false });
+    await streamFile(req, res, { forceDownload: false });
 });
 
 // ── Download (attachment) ─────────────────────────────────────────────────
@@ -126,25 +126,51 @@ app.get('/f/:id', async (req, res) => {
 // prepends "dl" as the first path segment of the view URL
 // (".../f/<id>" -> ".../dl/f/<id>") - no frontend changes needed for this.
 app.get('/dl/f/:id', async (req, res) => {
-    await redirectToPresigned(req, res, { forceDownload: true });
+    await streamFile(req, res, { forceDownload: true });
 });
 
-async function redirectToPresigned(req, res, { forceDownload }) {
+// Streams the object from S3 through this backend rather than redirecting
+// to a presigned S3/NOS URL. This keeps the app genuinely self-hosted from
+// the visitor's perspective: the browser's address bar, and every byte it
+// receives, stays on tempfile.xyz - the S3-compatible storage endpoint is
+// an internal implementation detail the client never sees or depends on.
+async function streamFile(req, res, { forceDownload }) {
     const row = getUploadById(req.params.id);
     if (!row) {
         return res.status(404).send('File not found or expired.');
     }
 
     try {
-        const url = await getPresignedDownloadUrl(row.s3_key, {
-            expiresInSeconds: 300,
-            filename: row.original_name,
-            forceDownload,
-        });
-        res.redirect(302, url);
+        const object = await getObject(row.s3_key);
+
+        res.setHeader('Content-Type', row.content_type || 'application/octet-stream');
+        if (typeof row.size === 'number') {
+            res.setHeader('Content-Length', row.size);
+        }
+        if (forceDownload) {
+            res.setHeader('Content-Disposition', `attachment; filename="${row.original_name.replace(/"/g, '')}"`);
+        }
+        // Short cache is fine since each id is immutable content until it expires.
+        res.setHeader('Cache-Control', 'private, max-age=60');
+
+        const body = object.Body;
+        if (body && typeof body.pipe === 'function') {
+            body.on('error', (err) => {
+                console.error(`[download] stream error for ${row.id}:`, err);
+                res.destroy(err);
+            });
+            body.pipe(res);
+        } else {
+            // Fallback for SDK responses that don't expose a Node stream.
+            const buffer = Buffer.from(await object.Body.transformToByteArray());
+            res.end(buffer);
+        }
     } catch (err) {
-        console.error('[download] failed to presign url:', err);
-        res.status(500).send('Failed to generate download link.');
+        if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) {
+            return res.status(404).send('File not found or expired.');
+        }
+        console.error(`[download] failed to fetch object for ${row.id}:`, err);
+        res.status(500).send('Failed to retrieve file.');
     }
 }
 

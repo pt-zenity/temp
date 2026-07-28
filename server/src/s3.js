@@ -66,3 +66,12 @@ export async function getPresignedDownloadUrl(key, { expiresInSeconds = 3600, fi
     });
     return getSignedUrl(s3, command, { expiresIn: expiresInSeconds });
 }
+
+// Fetches the object directly from S3 so it can be streamed back to the
+// client through our own backend. Used instead of a redirect to a
+// presigned S3 URL so the S3/NOS endpoint is never exposed to end users —
+// the browser only ever talks to tempfile.xyz, keeping the app genuinely
+// self-hosted from the visitor's point of view.
+export async function getObject(key) {
+    return s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+}
