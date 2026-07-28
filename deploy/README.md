@@ -89,6 +89,47 @@ fresh deploy, check `journalctl -u tmpfup-backend.service` first; a missing
 `ADMIN_JWT_SECRET` or `ADMIN_PASSWORD` (on first boot) will make it exit
 immediately.
 
+## Security hardening (backend + infra)
+
+The backend runs as a **dedicated unprivileged system user** (`tmpfup`),
+not root. One-time setup on the VPS before applying `tmpfup-backend.service`:
+
+```bash
+useradd --system --no-create-home --shell /usr/sbin/nologin tmpfup
+chown -R tmpfup:tmpfup /opt/tmpfup-backend
+```
+
+Other hardening baked into the app/infra (see commit history for the full
+list):
+- CORS is split by route: the public upload/download API allows any origin
+  (no cookies involved, intentional for a public tool), while `/api/admin/*`
+  never reflects a wildcard origin alongside credentials — it only allows
+  cookie-carrying cross-origin requests from an explicit `CORS_ORIGIN`
+  allowlist (same-origin requests always work regardless).
+- `helmet` security headers on every API response; nginx adds HSTS,
+  `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and a
+  `frame-ancestors` CSP directive on every response for the site.
+- Uploaded files with an actively-renderable content type (HTML, SVG,
+  JS, XML, etc.) are always served as a forced, non-executable attachment
+  — never inline with their original content type — closing a stored-XSS
+  vector on the app's own origin.
+- `Content-Disposition` filenames are sanitized against header-injection
+  characters (CR/LF/control chars), not just double quotes.
+- Rate limiting keys off Cloudflare's `CF-Connecting-IP` header (falls back
+  to Express's computed IP) instead of a spoofable `X-Forwarded-For`, and
+  now also covers admin `change-password` / file-delete routes, not just
+  login/upload.
+- Centralized Express error handler catches malformed JSON bodies, oversized
+  payloads, and any other unhandled error with a clean JSON response instead
+  of a raw stack trace; graceful `SIGTERM`/`SIGINT` shutdown lets in-flight
+  downloads finish before the process exits (important for zero-downtime
+  redeploys/restarts).
+- bcrypt cost factor raised to 12; JWT verification pins the `HS256`
+  algorithm explicitly.
+- systemd unit sandboxed with `ProtectSystem=strict`, `ProtectHome`,
+  `MemoryDenyWriteExecute`, an empty capability set, and more (see
+  `tmpfup-backend.service`).
+
 Panel features: live CPU/RAM/disk + Node uptime, real S3 bucket usage
 (queried live from Neo.id NOS, not just local DB), upload trend chart,
 file-type breakdown, paginated/searchable file manager with manual delete,

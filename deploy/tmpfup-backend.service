@@ -8,12 +8,33 @@ WorkingDirectory=/opt/tmpfup-backend
 ExecStart=/usr/bin/node /opt/tmpfup-backend/index.js
 Restart=always
 RestartSec=3
-User=root
+# Runs as a dedicated, unprivileged system account (not root). This process
+# only needs to: bind to a high port (3001, no CAP_NET_BIND_SERVICE
+# required), read its own code/.env, and read+write its own sqlite data
+# dir - none of that needs root. See deploy/README.md for the one-time
+# `useradd`/`chown` setup this expects on the host.
+User=tmpfup
+Group=tmpfup
 Environment=NODE_ENV=production
 
-# Basic hardening
+# ── Sandboxing (systemd hardening) ──────────────────────────────────────
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tmpfup-backend/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 StandardOutput=append:/var/log/tmpfup-backend.log
 StandardError=append:/var/log/tmpfup-backend.error.log

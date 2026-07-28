@@ -6,6 +6,9 @@ import { getAdminByUsername, getAdminCount, createAdminUser, updateAdminPassword
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET;
 const TOKEN_TTL = '12h';
 const COOKIE_NAME = 'tmpfup_admin_token';
+// Current OWASP guidance recommends a work factor of >=10, with 12 as a
+// solid modern default balancing security and login latency.
+const BCRYPT_ROUNDS = 12;
 
 if (!JWT_SECRET || JWT_SECRET.length < 16) {
     throw new Error(
@@ -29,7 +32,7 @@ export function ensureBootstrapAdmin() {
         );
     }
 
-    const passwordHash = bcrypt.hashSync(password, 10);
+    const passwordHash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
     createAdminUser({ username, passwordHash, createdAt: new Date().toISOString() });
     console.log(`[auth] Bootstrapped initial admin user "${username}".`);
 }
@@ -42,7 +45,7 @@ export function verifyCredentials(username, password) {
 }
 
 export function changePassword(username, newPassword) {
-    const passwordHash = bcrypt.hashSync(newPassword, 10);
+    const passwordHash = bcrypt.hashSync(newPassword, BCRYPT_ROUNDS);
     updateAdminPassword(username, passwordHash);
 }
 
@@ -51,12 +54,16 @@ export function recordLogin(username, ip) {
 }
 
 export function issueToken(username) {
-    return jwt.sign({ sub: username }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+    return jwt.sign({ sub: username }, JWT_SECRET, { expiresIn: TOKEN_TTL, algorithm: 'HS256' });
 }
 
 export function verifyToken(token) {
     try {
-        return jwt.verify(token, JWT_SECRET);
+        // Explicitly pin the accepted algorithm. jsonwebtoken already
+        // rejects the "none" algorithm and cross-algorithm confusion by
+        // default, but pinning it here removes any ambiguity and protects
+        // against a future library/config change silently widening it.
+        return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     } catch (_err) {
         return null;
     }

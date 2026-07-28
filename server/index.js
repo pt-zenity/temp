@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import multer from 'multer';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
@@ -11,6 +12,7 @@ import { buildKey, putObject, checkBucketAccess, getObject } from './src/s3.js';
 import { startCleanupLoop } from './src/cleanup.js';
 import { ensureBootstrapAdmin } from './src/auth.js';
 import { adminRouter } from './src/admin.js';
+import { getClientIp, getRateLimitKey, buildContentDisposition, isUnsafeInlineContentType } from './src/security.js';
 
 const PORT = Number(process.env.PORT || 3001);
 const DEFAULT_EXPIRE_SECONDS = Number(process.env.DEFAULT_EXPIRE_SECONDS || 3600);
@@ -19,19 +21,67 @@ const MAX_FILE_SIZE_BYTES = Number(process.env.MAX_FILE_SIZE_BYTES || 100 * 1024
 const CLEANUP_INTERVAL_MS = Number(process.env.CLEANUP_INTERVAL_MS || 60_000);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
+// Admin API routes carry a credentialed session cookie, so they must NEVER
+// be served with a reflected wildcard origin (Access-Control-Allow-Origin:
+// <anything> + Allow-Credentials: true lets *any* website read the logged-in
+// admin's data via the visitor's browser). The public upload/download
+// endpoints carry no cookie-based auth, so a permissive origin there is
+// safe and intentional (this is a public anonymous upload tool meant to be
+// embeddable/callable from anywhere).
+const explicitOrigins = CORS_ORIGIN === '*' ? [] : CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+
+const publicCors = cors({
+    origin: CORS_ORIGIN === '*' ? true : explicitOrigins,
+    credentials: false,
+});
+
+const adminCors = cors({
+    origin(origin, callback) {
+        // Same-origin requests (no Origin header, e.g. curl/server-to-server)
+        // are always allowed. Cross-origin requests are only allowed if an
+        // explicit, non-wildcard allowlist was configured via CORS_ORIGIN.
+        if (!origin) return callback(null, true);
+        if (explicitOrigins.length > 0 && explicitOrigins.includes(origin)) return callback(null, true);
+        if (explicitOrigins.length === 0) return callback(null, false); // wildcard config -> no cross-origin admin access
+        return callback(null, false);
+    },
+    credentials: true,
+});
+
+// Dispatch to the right CORS policy by path instead of chaining two
+// unconditional `cors()` middlewares - otherwise the second one to run
+// would blindly overwrite the Access-Control-* headers the first one set,
+// silently negating the /api/admin restriction below.
+function corsRouter(req, res, next) {
+    if (req.path.startsWith('/api/admin')) return adminCors(req, res, next);
+    return publicCors(req, res, next);
+}
+
 const app = express();
 app.disable('x-powered-by');
 // Required so req.protocol reflects the original client scheme (https)
 // when running behind the nginx reverse proxy, instead of always
 // reporting "http" for the internal proxy_pass connection.
 app.set('trust proxy', true);
+
+// Standard hardening headers (nosniff, no X-Frame embedding of the API,
+// disabled cross-domain policies, hidden Referer info, etc). We disable
+// helmet's default Content-Security-Policy here because this process only
+// serves a JSON API + raw file bytes, not HTML pages that need a CSP - the
+// actual frontend HTML is served by nginx/static hosting, not this app.
 app.use(
-    cors({
-        origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(',').map((s) => s.trim()),
-        credentials: true,
+    helmet({
+        contentSecurityPolicy: false,
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
     })
 );
-app.use(express.json());
+
+app.use(corsRouter);
+
+// Cap JSON body size well above any legitimate admin/API payload but far
+// below anything that could be used for a memory-exhaustion DoS (actual
+// file uploads go through multer's separate, configurable limit).
+app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
 // Basic protection against abuse on the public upload endpoint - generous
@@ -42,6 +92,7 @@ const uploadLimiter = rateLimit({
     limit: 60,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: getRateLimitKey,
     message: { status: 'error', message: 'Too many uploads from this IP. Please slow down.' },
 });
 
@@ -98,9 +149,9 @@ app.post('/api/upload', uploadLimiter, upload.single('file'), async (req, res) =
             size: req.file.size,
             createdAt: now.toISOString(),
             expiresAt: expiresAt.toISOString(),
-            uploaderIp: req.ip,
+            uploaderIp: getClientIp(req),
         });
-        logActivity({ actor: 'public', action: 'file_uploaded', target: id, detail: req.file.originalname, ip: req.ip });
+        logActivity({ actor: 'public', action: 'file_uploaded', target: id, detail: req.file.originalname, ip: getClientIp(req) });
 
         const baseUrl = `${req.protocol}://${req.get('host')}`;
 
@@ -168,13 +219,21 @@ async function streamFile(req, res, { forceDownload }) {
     try {
         const object = await getObject(row.s3_key);
 
-        res.setHeader('Content-Type', row.content_type || 'application/octet-stream');
+        // Never let the browser execute/render an uploaded file as active
+        // content on our own origin (HTML/SVG/JS can carry stored XSS that
+        // would run with tempfile.xyz's privileges against anyone who opens
+        // the link, including an admin). Such files are always served as a
+        // generic, non-executable download regardless of the requested mode.
+        const unsafeInline = isUnsafeInlineContentType(row.content_type);
+        const effectiveContentType = unsafeInline ? 'application/octet-stream' : row.content_type || 'application/octet-stream';
+        const disposition = forceDownload || unsafeInline ? 'attachment' : 'inline';
+
+        res.setHeader('Content-Type', effectiveContentType);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
         if (typeof row.size === 'number') {
             res.setHeader('Content-Length', row.size);
         }
-        if (forceDownload) {
-            res.setHeader('Content-Disposition', `attachment; filename="${row.original_name.replace(/"/g, '')}"`);
-        }
+        res.setHeader('Content-Disposition', buildContentDisposition(disposition, row.original_name));
         // Short cache is fine since each id is immutable content until it expires.
         res.setHeader('Cache-Control', 'private, max-age=60');
 
@@ -201,6 +260,35 @@ async function streamFile(req, res, { forceDownload }) {
     }
 }
 
+// ── 404 fallback for any unmatched API/app route ──────────────────────────
+app.use((req, res) => {
+    res.status(404).json({ status: 'error', message: 'Not found.' });
+});
+
+// ── Centralized error handler ─────────────────────────────────────────────
+// Catches anything an upstream middleware/route passed to next(err) or
+// threw synchronously - most notably malformed JSON bodies from
+// express.json(), which would otherwise surface as an unhandled 500 with a
+// raw stack trace. Kept last, per Express's error-handling middleware
+// convention (4-arg signature, mounted after all other app.use/app.METHOD).
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+    if (err?.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+        return res.status(400).json({ status: 'error', message: 'Malformed request body.' });
+    }
+    if (err?.type === 'entity.too.large') {
+        return res.status(413).json({ status: 'error', message: 'Request body too large.' });
+    }
+    if (err?.message === 'Not allowed by CORS') {
+        return res.status(403).json({ status: 'error', message: 'Origin not allowed.' });
+    }
+    console.error('[unhandled]', err);
+    if (res.headersSent) return; // response already started (e.g. mid-stream) - nothing more we can send
+    res.status(500).json({ status: 'error', message: 'Internal server error.' });
+});
+
+let httpServer;
+
 async function main() {
     try {
         await checkBucketAccess();
@@ -219,9 +307,22 @@ async function main() {
 
     startCleanupLoop(CLEANUP_INTERVAL_MS);
 
-    app.listen(PORT, '0.0.0.0', () => {
+    httpServer = app.listen(PORT, '0.0.0.0', () => {
         console.log(`[startup] /tmp/fup backend listening on http://0.0.0.0:${PORT}`);
     });
 }
+
+// Graceful shutdown: stop accepting new connections and let in-flight
+// requests (e.g. an in-progress file stream) finish, so systemd
+// restarts/deploys never abruptly cut off a download or upload.
+function shutdown(signal) {
+    console.log(`[shutdown] received ${signal}, closing server ...`);
+    if (!httpServer) process.exit(0);
+    httpServer.close(() => process.exit(0));
+    // Safety net in case some connection never closes.
+    setTimeout(() => process.exit(1), 10_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 main();
