@@ -32,34 +32,34 @@ function injectDownloadPath(originalUrl: string): string {
 </script>
 
 <template>
-    <div class="bg-base-200 rounded-md w-full border-2 border-dotted border-gray-700">
+    <div class="glass-subtle glass-hover rounded-md sm:rounded-lg w-full border-2 border-dotted border-white/15">
         <div
-            class="flex flex-row align-middle items-center justify-between gap-2 px-3 py-2 text-lg lg:text-base text-left font-medium text-ellipsis break-all truncate"
+            class="flex flex-row align-middle items-center justify-between gap-2 px-2 sm:px-3 py-2 text-base sm:text-lg lg:text-base text-left font-medium text-ellipsis break-all truncate"
         >
             <div class="flex align-middle items-center gap-2 truncate">
-                <div class="size-7">
+                <div class="size-6 sm:size-7 shrink-0">
                     <img
                         v-if="fileType === 'image/jpeg' || fileType === 'image/png'"
                         :src="injectDownloadPath(url)"
-                        class="size-7"
+                        class="size-6 sm:size-7 rounded"
                         alt="File preview"
                     />
-                    <Icon v-else class="size-7" icon="mdi:file-outline" />
+                    <Icon v-else class="size-6 sm:size-7" icon="mdi:file-outline" />
                 </div>
                 <div class="truncate">
                     <p class="truncate">{{ fileName }}</p>
-                    <div class="flex gap-4">
+                    <div class="flex gap-2 sm:gap-4">
                         <p class="text-clip text-xs hidden md:block">{{ fileType }}</p>
                         <p class="text-clip text-xs">{{ fileSize }}</p>
                         <p class="truncate text-xs"><span class="hidden md:inline">Exp. in</span> {{ expiredAfter }}</p>
                     </div>
                 </div>
             </div>
-            <div class="flex">
-                <a class="btn btn-sm" :href="injectDownloadPath(url)" target="_blank">
+            <div class="flex shrink-0">
+                <a class="btn btn-sm btn-ghost" :href="injectDownloadPath(url)" target="_blank">
                     <Icon class="size-4" icon="material-symbols:download" />
                 </a>
-                <a class="btn btn-sm" :href="url" target="_blank">
+                <a class="btn btn-sm btn-ghost" :href="url" target="_blank">
                     <Icon class="size-4" icon="majesticons:open-line" />
                 </a>
             </div>

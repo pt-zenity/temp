@@ -69,9 +69,9 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize));
 
 <template>
     <AdminLayout>
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div>
-                <h1 class="text-2xl font-bold">Files</h1>
+                <h1 class="text-xl sm:text-2xl font-bold">Files</h1>
                 <p class="text-sm text-base-content/60">{{ total }} file(s) matching current filters</p>
             </div>
             <button class="btn btn-sm btn-ghost gap-2" :disabled="loading" @click="load">
@@ -110,14 +110,67 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize));
                     Deleted/Expired
                 </button>
             </div>
-            <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
+            <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64 bg-white/5">
                 <Icon icon="mdi:magnify" class="size-4 text-base-content/40" />
                 <input v-model="search" type="text" placeholder="Search by name or id..." class="grow" />
             </label>
         </div>
 
-        <!-- Table -->
-        <div class="bg-base-200 rounded-lg overflow-x-auto">
+        <!-- Mobile card list (small screens) -->
+        <div class="flex flex-col gap-3 sm:hidden">
+            <div v-if="loading" class="glass rounded-lg text-center py-10">
+                <span class="loading loading-spinner"></span>
+            </div>
+            <div v-else-if="!rows.length" class="glass rounded-lg text-center py-10 text-base-content/50">
+                No files found.
+            </div>
+            <div v-for="row in rows" :key="row.id" class="glass glass-hover rounded-lg p-3 flex flex-col gap-2">
+                <div class="flex items-start justify-between gap-2">
+                    <p class="font-medium truncate flex-1" :title="row.original_name">{{ row.original_name }}</p>
+                    <span v-if="row.deleted_at" class="badge badge-error badge-sm shrink-0">
+                        {{ row.deleted_reason === 'manual_admin_delete' ? 'Deleted' : 'Expired' }}
+                    </span>
+                    <span v-else-if="isExpired(row)" class="badge badge-warning badge-sm shrink-0">Pending</span>
+                    <span v-else class="badge badge-success badge-sm shrink-0">Active</span>
+                </div>
+                <p class="text-xs text-base-content/40 font-mono truncate">{{ row.id }}</p>
+                <div class="grid grid-cols-2 gap-2 text-xs text-base-content/60">
+                    <p>{{ formatBytes(row.size) }}</p>
+                    <p>{{ row.download_count }} download(s)</p>
+                    <p :title="formatDate(row.created_at)">Up: {{ formatRelative(row.created_at) }}</p>
+                    <p :title="formatDate(row.expires_at)">Exp: {{ formatRelative(row.expires_at) }}</p>
+                </div>
+                <p class="text-xs text-base-content/40 font-mono">IP: {{ row.uploader_ip || '-' }}</p>
+                <div v-if="!row.deleted_at" class="flex items-center gap-2 pt-1 border-t border-white/10 mt-1">
+                    <a :href="`/f/${row.id}`" target="_blank" class="btn btn-xs btn-ghost gap-1">
+                        <Icon icon="mdi:eye-outline" class="size-4" />
+                        View
+                    </a>
+                    <button
+                        v-if="confirmId !== row.id"
+                        class="btn btn-xs btn-ghost text-error gap-1"
+                        @click="confirmId = row.id"
+                    >
+                        <Icon icon="mdi:delete-outline" class="size-4" />
+                        Delete
+                    </button>
+                    <template v-else>
+                        <button
+                            class="btn btn-xs btn-error"
+                            :disabled="deletingId === row.id"
+                            @click="handleDelete(row.id)"
+                        >
+                            <span v-if="deletingId === row.id" class="loading loading-spinner loading-xs"></span>
+                            Confirm
+                        </button>
+                        <button class="btn btn-xs btn-ghost" @click="confirmId = null">Cancel</button>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table (sm and up) -->
+        <div class="glass rounded-lg overflow-x-auto hidden sm:block">
             <table class="table table-sm">
                 <thead>
                     <tr>

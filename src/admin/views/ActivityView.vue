@@ -48,9 +48,9 @@ function meta(action: string) {
 
 <template>
     <AdminLayout>
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div>
-                <h1 class="text-2xl font-bold">Activity Log</h1>
+                <h1 class="text-xl sm:text-2xl font-bold">Activity Log</h1>
                 <p class="text-sm text-base-content/60">{{ total }} recorded event(s)</p>
             </div>
             <button class="btn btn-sm btn-ghost gap-2" :disabled="loading" @click="load">
@@ -64,7 +64,7 @@ function meta(action: string) {
             {{ error }}
         </div>
 
-        <div class="bg-base-200 rounded-lg divide-y divide-base-300">
+        <div class="glass rounded-lg divide-y divide-white/10">
             <div v-if="loading" class="text-center py-10">
                 <span class="loading loading-spinner"></span>
             </div>
@@ -72,21 +72,23 @@ function meta(action: string) {
             <div
                 v-for="row in rows"
                 :key="row.id"
-                class="flex items-start gap-3 p-3 text-sm"
+                class="flex flex-col sm:flex-row items-start gap-2 sm:gap-3 p-3 text-sm"
             >
-                <Icon :icon="meta(row.action).icon" class="size-5 shrink-0 mt-0.5" :class="meta(row.action).color" />
-                <div class="flex-1 min-w-0">
-                    <p>
-                        <span class="font-semibold">{{ row.actor }}</span>
-                        <span class="text-base-content/70"> {{ meta(row.action).label.toLowerCase() }}</span>
-                        <span v-if="row.detail" class="text-base-content/50"> — {{ row.detail }}</span>
-                    </p>
-                    <p class="text-xs text-base-content/40 font-mono">
-                        {{ formatDate(row.created_at) }} · {{ row.ip || 'unknown ip' }}
-                        <span v-if="row.target">· target: {{ row.target }}</span>
-                    </p>
+                <div class="flex items-start gap-3 flex-1 min-w-0">
+                    <Icon :icon="meta(row.action).icon" class="size-5 shrink-0 mt-0.5" :class="meta(row.action).color" />
+                    <div class="flex-1 min-w-0">
+                        <p>
+                            <span class="font-semibold">{{ row.actor }}</span>
+                            <span class="text-base-content/70"> {{ meta(row.action).label.toLowerCase() }}</span>
+                            <span v-if="row.detail" class="text-base-content/50"> — {{ row.detail }}</span>
+                        </p>
+                        <p class="text-xs text-base-content/40 font-mono break-all">
+                            {{ formatDate(row.created_at) }} · {{ row.ip || 'unknown ip' }}
+                            <span v-if="row.target">· target: {{ row.target }}</span>
+                        </p>
+                    </div>
                 </div>
-                <span class="text-xs text-base-content/40 whitespace-nowrap">{{ formatRelative(row.created_at) }}</span>
+                <span class="text-xs text-base-content/40 whitespace-nowrap sm:ml-2">{{ formatRelative(row.created_at) }}</span>
             </div>
         </div>
 

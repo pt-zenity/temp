@@ -73,16 +73,16 @@ onMounted(() => {
     <div>
         <Title />
         <div
-            class="columns-1 md:columns-2 gap-3"
+            class="columns-1 md:columns-2 gap-3 sm:gap-4"
             :class="{ 'md:columns-1': files.length >= 5, 'md:columns-2': files.length <= 5 }"
         >
-            <div class="bg-base-200 rounded-md p-3 mb-2">
-                <div class="border-2 h-auto rounded-md border-dashed border-gray-700">
+            <div class="glass glass-hover rounded-xl sm:rounded-2xl p-3 sm:p-4 mb-3 sm:mb-4">
+                <div class="border-2 h-auto rounded-md sm:rounded-lg border-dashed border-white/20">
                     <FilePond
                         name="file"
                         ref="pond"
                         :credits="false"
-                        label-idle='Drag & Drop your files or <span class="filepond--label-action"> Browse </span>'
+                        label-idle='Drag &amp; Drop your files or <span class="filepond--label-action"> Browse </span>'
                         :allow-multiple="true"
                         :allow-browse="true"
                         :allow-remove="true"
@@ -92,20 +92,20 @@ onMounted(() => {
                         :server="UPLOAD_ENDPOINT"
                         :instant-upload="false"
                         @processfile="processFile"
-                        class="p-12"
+                        class="p-6 sm:p-10 md:p-12"
                     />
                 </div>
             </div>
-            <div class="font-fira_code bg-base-200 rounded-md p-3 flex flex-col gap-2">
+            <div class="glass glass-hover font-fira_code rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col gap-2">
                 <FileCard v-if="files.length" v-for="file in files" v-bind="file" />
-                <p v-if="files.length" class="text-xs py-2 border-t border-dashed border-gray-600">
+                <p v-if="files.length" class="text-xs py-2 border-t border-dashed border-white/15">
                     These file lists are saved to local cookies. You can't see it on another browser or computer.
                 </p>
                 <div
                     v-if="!files.length"
-                    class="h-full flex flex-col gap-2 py-6 align-middle items-center justify-center border-2 border-dashed border-gray-700 rounded-md"
+                    class="h-full flex flex-col gap-2 py-8 sm:py-6 align-middle items-center justify-center border-2 border-dashed border-white/15 rounded-md sm:rounded-lg"
                 >
-                    <Icon class="size-12" icon="mdi:file-outline" />
+                    <Icon class="size-10 sm:size-12" icon="mdi:file-outline" />
                     Files you upload will appear here
                 </div>
             </div>
@@ -118,7 +118,7 @@ onMounted(() => {
     font-family: 'Fira Code', monospace !important;
 }
 .filepond--panel-root {
-    background-color: #242424 !important;
+    background-color: rgba(255, 255, 255, 0.04) !important;
 }
 .filepond--drop-label {
     color: #ffffff !important;

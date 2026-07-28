@@ -56,9 +56,9 @@ function typeIcon(category: string) {
 
 <template>
     <AdminLayout>
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div>
-                <h1 class="text-2xl font-bold">Dashboard</h1>
+                <h1 class="text-xl sm:text-2xl font-bold">Dashboard</h1>
                 <p class="text-sm text-base-content/60">Live production monitoring for tempfile.xyz</p>
             </div>
             <button class="btn btn-sm btn-ghost gap-2" :disabled="loading" @click="loadAll">
@@ -78,7 +78,7 @@ function typeIcon(category: string) {
 
         <template v-else-if="stats && system && s3Usage">
             <!-- Top stat cards -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
                 <StatCard
                     label="Active files"
                     :value="stats.activeCount"
@@ -109,9 +109,9 @@ function typeIcon(category: string) {
                 />
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
                 <!-- Trend chart -->
-                <div class="lg:col-span-2 bg-base-200 rounded-lg p-4">
+                <div class="lg:col-span-2 glass rounded-lg sm:rounded-xl p-3 sm:p-4">
                     <h2 class="font-semibold mb-3 flex items-center gap-2">
                         <Icon icon="mdi:chart-line" class="size-5" />
                         Upload trend (last 14 days)
@@ -126,7 +126,7 @@ function typeIcon(category: string) {
                 </div>
 
                 <!-- File type breakdown -->
-                <div class="bg-base-200 rounded-lg p-4">
+                <div class="glass rounded-lg sm:rounded-xl p-3 sm:p-4">
                     <h2 class="font-semibold mb-3 flex items-center gap-2">
                         <Icon icon="mdi:chart-donut" class="size-5" />
                         Files by type
@@ -142,10 +142,10 @@ function typeIcon(category: string) {
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <!-- System health -->
-                <div class="bg-base-200 rounded-lg p-4">
-                    <h2 class="font-semibold mb-4 flex items-center gap-2">
+                <div class="glass rounded-lg sm:rounded-xl p-3 sm:p-4">
+                    <h2 class="font-semibold mb-4 flex items-center gap-2 flex-wrap">
                         <Icon icon="mdi:server-outline" class="size-5" />
                         System health
                         <span class="badge badge-success badge-sm ml-auto">{{ system.hostname }}</span>
@@ -189,14 +189,14 @@ function typeIcon(category: string) {
                 </div>
 
                 <!-- S3 bucket usage -->
-                <div class="bg-base-200 rounded-lg p-4">
-                    <h2 class="font-semibold mb-4 flex items-center gap-2">
+                <div class="glass rounded-lg sm:rounded-xl p-3 sm:p-4">
+                    <h2 class="font-semibold mb-4 flex items-center gap-2 flex-wrap">
                         <Icon icon="mdi:bucket-outline" class="size-5" />
                         S3 storage (Neo.id NOS)
                         <span class="badge badge-info badge-sm ml-auto">live</span>
                     </h2>
                     <div class="flex flex-col gap-4">
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <StatCard
                                 label="Objects in bucket"
                                 :value="s3Usage.objectCount"
@@ -210,7 +210,7 @@ function typeIcon(category: string) {
                                 color="primary"
                             />
                         </div>
-                        <div class="text-sm bg-base-300/50 rounded-md p-3 font-mono">
+                        <div class="text-sm glass-subtle rounded-md p-3 font-mono break-all">
                             <p><span class="text-base-content/50">Bucket:</span> {{ s3Usage.bucket }}</p>
                             <p><span class="text-base-content/50">Prefix:</span> {{ s3Usage.prefix || '(none)' }}</p>
                         </div>

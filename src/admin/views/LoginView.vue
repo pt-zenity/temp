@@ -32,15 +32,15 @@ async function handleSubmit() {
 </script>
 
 <template>
-    <div class="min-h-screen flex items-center justify-center bg-base-100 font-fira_code p-4">
+    <div class="min-h-screen flex items-center justify-center font-fira_code p-4">
         <div class="w-full max-w-sm">
             <div class="text-center mb-6">
-                <Icon icon="mdi:shield-lock-outline" class="size-12 text-primary mx-auto mb-2" />
-                <h1 class="text-2xl font-bold">/tmp/fup admin</h1>
+                <Icon icon="mdi:shield-lock-outline" class="size-10 sm:size-12 text-primary mx-auto mb-2" />
+                <h1 class="text-xl sm:text-2xl font-bold">/tmp/fup admin</h1>
                 <p class="text-sm text-base-content/60">Sign in to manage tempfile.xyz</p>
             </div>
 
-            <form class="bg-base-200 rounded-lg p-6 flex flex-col gap-4" @submit.prevent="handleSubmit">
+            <form class="glass-strong rounded-xl sm:rounded-2xl p-5 sm:p-6 flex flex-col gap-4" @submit.prevent="handleSubmit">
                 <div v-if="error" class="alert alert-error text-sm py-2">
                     <Icon icon="mdi:alert-circle-outline" class="size-5" />
                     {{ error }}
@@ -52,7 +52,7 @@ async function handleSubmit() {
                         v-model="username"
                         type="text"
                         autocomplete="username"
-                        class="input input-bordered w-full"
+                        class="input input-bordered w-full bg-white/5"
                         placeholder="admin"
                         :disabled="loading"
                     />
@@ -64,7 +64,7 @@ async function handleSubmit() {
                         v-model="password"
                         type="password"
                         autocomplete="current-password"
-                        class="input input-bordered w-full"
+                        class="input input-bordered w-full bg-white/5"
                         placeholder="••••••••"
                         :disabled="loading"
                     />

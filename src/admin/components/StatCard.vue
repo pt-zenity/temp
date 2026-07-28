@@ -11,7 +11,7 @@ defineProps<{
 </script>
 
 <template>
-    <div class="bg-base-200 rounded-lg p-4 flex items-start gap-3">
+    <div class="glass glass-hover rounded-lg sm:rounded-xl p-3 sm:p-4 flex items-start gap-2 sm:gap-3">
         <div
             class="rounded-md p-2 shrink-0"
             :class="{
@@ -22,11 +22,11 @@ defineProps<{
                 'bg-info/20 text-info': color === 'info',
             }"
         >
-            <Icon :icon="icon" class="size-6" />
+            <Icon :icon="icon" class="size-5 sm:size-6" />
         </div>
         <div class="min-w-0">
             <p class="text-xs text-base-content/60 truncate">{{ label }}</p>
-            <p class="text-xl font-bold truncate">{{ value }}</p>
+            <p class="text-lg sm:text-xl font-bold truncate">{{ value }}</p>
             <p v-if="sublabel" class="text-xs text-base-content/50 truncate">{{ sublabel }}</p>
         </div>
     </div>

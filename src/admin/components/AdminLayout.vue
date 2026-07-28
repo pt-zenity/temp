@@ -29,7 +29,7 @@ async function handleLogout() {
 </script>
 
 <template>
-    <div class="min-h-screen bg-base-100 font-fira_code flex">
+    <div class="min-h-screen font-fira_code flex">
         <!-- Mobile overlay -->
         <div
             v-if="sidebarOpen"
@@ -39,10 +39,10 @@ async function handleLogout() {
 
         <!-- Sidebar -->
         <aside
-            class="fixed lg:static inset-y-0 left-0 z-40 w-60 bg-base-200 border-r border-base-300 flex flex-col transition-transform duration-200"
+            class="glass-strong fixed lg:sticky lg:top-0 inset-y-0 left-0 z-40 w-64 sm:w-60 lg:h-screen border-r-0 lg:rounded-none flex flex-col transition-transform duration-200"
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
         >
-            <div class="p-4 border-b border-base-300">
+            <div class="p-4 border-b border-white/10">
                 <RouterLink to="/admin" class="flex items-center gap-2">
                     <Icon icon="mdi:shield-lock-outline" class="size-6 text-primary" />
                     <span class="text-lg font-bold">/tmp/fup admin</span>
@@ -50,16 +50,16 @@ async function handleLogout() {
                 <p class="text-xs text-base-content/50 mt-1">tempfile.xyz production</p>
             </div>
 
-            <nav class="flex-1 p-3 flex flex-col gap-1">
+            <nav class="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
                 <RouterLink
                     v-for="item in navItems"
                     :key="item.name"
                     :to="item.path"
-                    class="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors"
+                    class="glass-hover flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors"
                     :class="
                         route.name === item.name
-                            ? 'bg-primary text-primary-content'
-                            : 'hover:bg-base-300 text-base-content/80'
+                            ? 'bg-primary/80 text-primary-content'
+                            : 'text-base-content/80'
                     "
                     @click="sidebarOpen = false"
                 >
@@ -68,11 +68,11 @@ async function handleLogout() {
                 </RouterLink>
             </nav>
 
-            <div class="p-3 border-t border-base-300 flex flex-col gap-2">
+            <div class="p-3 border-t border-white/10 flex flex-col gap-2">
                 <RouterLink
                     to="/"
                     target="_blank"
-                    class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-base-content/60 hover:bg-base-300"
+                    class="glass-hover flex items-center gap-2 px-3 py-2 rounded-md text-sm text-base-content/60"
                 >
                     <Icon icon="mdi:open-in-new" class="size-4" />
                     View public site
@@ -90,13 +90,13 @@ async function handleLogout() {
 
         <!-- Main content -->
         <div class="flex-1 min-w-0 flex flex-col">
-            <header class="lg:hidden flex items-center gap-3 p-3 border-b border-base-300 bg-base-200">
+            <header class="glass-subtle lg:hidden sticky top-0 z-20 flex items-center gap-3 p-3">
                 <button class="btn btn-sm btn-ghost" @click="sidebarOpen = true">
                     <Icon icon="mdi:menu" class="size-5" />
                 </button>
                 <span class="font-bold">/tmp/fup admin</span>
             </header>
-            <main class="flex-1 p-4 lg:p-8 overflow-x-hidden">
+            <main class="flex-1 p-3 sm:p-4 lg:p-8 overflow-x-hidden">
                 <slot />
             </main>
         </div>

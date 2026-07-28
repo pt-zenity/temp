@@ -50,11 +50,11 @@ async function handleChangePassword() {
 <template>
     <AdminLayout>
         <div class="mb-6">
-            <h1 class="text-2xl font-bold">Settings</h1>
+            <h1 class="text-xl sm:text-2xl font-bold">Settings</h1>
             <p class="text-sm text-base-content/60">Manage your admin account</p>
         </div>
 
-        <div class="max-w-md bg-base-200 rounded-lg p-5">
+        <div class="max-w-md glass rounded-lg sm:rounded-xl p-4 sm:p-5">
             <h2 class="font-semibold mb-4 flex items-center gap-2">
                 <Icon icon="mdi:account-outline" class="size-5" />
                 Account
@@ -65,7 +65,7 @@ async function handleChangePassword() {
             </p>
         </div>
 
-        <div class="max-w-md bg-base-200 rounded-lg p-5 mt-6">
+        <div class="max-w-md glass rounded-lg sm:rounded-xl p-4 sm:p-5 mt-6">
             <h2 class="font-semibold mb-4 flex items-center gap-2">
                 <Icon icon="mdi:key-change" class="size-5" />
                 Change password
@@ -86,7 +86,7 @@ async function handleChangePassword() {
                     <input
                         v-model="newPassword"
                         type="password"
-                        class="input input-bordered w-full"
+                        class="input input-bordered w-full bg-white/5"
                         placeholder="At least 8 characters"
                         :disabled="loading"
                     />
@@ -96,7 +96,7 @@ async function handleChangePassword() {
                     <input
                         v-model="confirmPassword"
                         type="password"
-                        class="input input-bordered w-full"
+                        class="input input-bordered w-full bg-white/5"
                         :disabled="loading"
                     />
                 </label>
