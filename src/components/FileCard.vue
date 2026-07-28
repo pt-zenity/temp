@@ -1,6 +1,9 @@
 <script lang="ts" setup>
 import { Icon } from '@iconify/vue';
 import { computed } from 'vue';
+import { useI18n } from '../i18n';
+
+const { t, locale } = useI18n();
 
 const props = defineProps<{
     url: string;
@@ -13,6 +16,7 @@ const props = defineProps<{
 const expiredAfter = computed(() => {
     const minute = Math.floor((Number(new Date(props.expiredAt)) - Date.now()) / 60 / 1000);
 
+    if (locale.value === 'id') return `${minute} menit`;
     return `${minute} minute${minute > 1 ? 's' : ''}`;
 });
 
@@ -51,7 +55,9 @@ function injectDownloadPath(originalUrl: string): string {
                     <div class="flex gap-2 sm:gap-4">
                         <p class="text-clip text-xs hidden md:block">{{ fileType }}</p>
                         <p class="text-clip text-xs">{{ fileSize }}</p>
-                        <p class="truncate text-xs"><span class="hidden md:inline">Exp. in</span> {{ expiredAfter }}</p>
+                        <p class="truncate text-xs">
+                            <span class="hidden md:inline">{{ t('fileCard.expiresIn') }}</span> {{ expiredAfter }}
+                        </p>
                     </div>
                 </div>
             </div>

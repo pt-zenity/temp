@@ -8,7 +8,9 @@ import TrendChart from '../components/TrendChart.vue';
 import { getStats, getSystem, getS3Usage } from '../api';
 import type { StatsData, SystemData, S3UsageData } from '../api';
 import { formatBytes, formatUptime } from '../format';
+import { useI18n } from '../../i18n';
 
+const { t } = useI18n();
 const stats = ref<StatsData | null>(null);
 const system = ref<SystemData | null>(null);
 const s3Usage = ref<S3UsageData | null>(null);
@@ -24,7 +26,7 @@ async function loadAll() {
         s3Usage.value = s3Res.data;
         error.value = '';
     } catch (err: any) {
-        error.value = err?.message || 'Failed to load dashboard data.';
+        error.value = err?.message || t('dashboard.errorLoad');
     } finally {
         loading.value = false;
     }
@@ -52,18 +54,24 @@ function typeIcon(category: string) {
     };
     return map[category] || map.other;
 }
+
+function typeLabel(category: string) {
+    return t(`dashboard.category.${category}`) !== `dashboard.category.${category}`
+        ? t(`dashboard.category.${category}`)
+        : category;
+}
 </script>
 
 <template>
     <AdminLayout>
         <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div>
-                <h1 class="text-xl sm:text-2xl font-bold">Dashboard</h1>
-                <p class="text-sm text-base-content/60">Live production monitoring for tempfile.xyz</p>
+                <h1 class="text-xl sm:text-2xl font-bold">{{ t('dashboard.title') }}</h1>
+                <p class="text-sm text-base-content/60">{{ t('dashboard.subtitle') }}</p>
             </div>
             <button class="btn btn-sm btn-ghost gap-2" :disabled="loading" @click="loadAll">
                 <Icon icon="mdi:refresh" class="size-4" :class="{ 'animate-spin': loading }" />
-                Refresh
+                {{ t('admin.refresh') }}
             </button>
         </div>
 
@@ -80,30 +88,30 @@ function typeIcon(category: string) {
             <!-- Top stat cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
                 <StatCard
-                    label="Active files"
+                    :label="t('dashboard.activeFiles')"
                     :value="stats.activeCount"
                     :sublabel="formatBytes(stats.activeBytes)"
                     icon="mdi:file-multiple-outline"
                     color="primary"
                 />
                 <StatCard
-                    label="Total uploads (all time)"
+                    :label="t('dashboard.totalUploads')"
                     :value="stats.totalUploads"
-                    :sublabel="formatBytes(stats.totalBytesAllTime) + ' total'"
+                    :sublabel="formatBytes(stats.totalBytesAllTime) + ' ' + t('dashboard.totalSuffix')"
                     icon="mdi:cloud-upload-outline"
                     color="info"
                 />
                 <StatCard
-                    label="Uploads (24h)"
+                    :label="t('dashboard.uploads24h')"
                     :value="stats.uploads24h"
                     :sublabel="formatBytes(stats.bytes24h)"
                     icon="mdi:clock-fast"
                     color="success"
                 />
                 <StatCard
-                    label="Total downloads"
+                    :label="t('dashboard.totalDownloads')"
                     :value="stats.totalDownloads"
-                    sublabel="across all files"
+                    :sublabel="t('dashboard.acrossAllFiles')"
                     icon="mdi:download-outline"
                     color="warning"
                 />
@@ -114,7 +122,7 @@ function typeIcon(category: string) {
                 <div class="lg:col-span-2 glass rounded-lg sm:rounded-xl p-3 sm:p-4">
                     <h2 class="font-semibold mb-3 flex items-center gap-2">
                         <Icon icon="mdi:chart-line" class="size-5" />
-                        Upload trend (last 14 days)
+                        {{ t('dashboard.uploadTrend') }}
                     </h2>
                     <TrendChart
                         v-if="stats.daily.length"
@@ -122,23 +130,23 @@ function typeIcon(category: string) {
                         :counts="stats.daily.map((d) => d.count)"
                         :bytes="stats.daily.map((d) => d.bytes)"
                     />
-                    <p v-else class="text-sm text-base-content/50 py-16 text-center">No uploads yet.</p>
+                    <p v-else class="text-sm text-base-content/50 py-16 text-center">{{ t('dashboard.noUploadsYet') }}</p>
                 </div>
 
                 <!-- File type breakdown -->
                 <div class="glass rounded-lg sm:rounded-xl p-3 sm:p-4">
                     <h2 class="font-semibold mb-3 flex items-center gap-2">
                         <Icon icon="mdi:chart-donut" class="size-5" />
-                        Files by type
+                        {{ t('dashboard.filesByType') }}
                     </h2>
                     <div v-if="stats.byType.length" class="flex flex-col gap-3">
-                        <div v-for="t in stats.byType" :key="t.category" class="flex items-center gap-3">
-                            <Icon :icon="typeIcon(t.category)" class="size-5 text-base-content/60 shrink-0" />
-                            <span class="text-sm capitalize flex-1">{{ t.category }}</span>
-                            <span class="badge badge-neutral">{{ t.count }}</span>
+                        <div v-for="typeRow in stats.byType" :key="typeRow.category" class="flex items-center gap-3">
+                            <Icon :icon="typeIcon(typeRow.category)" class="size-5 text-base-content/60 shrink-0" />
+                            <span class="text-sm flex-1">{{ typeLabel(typeRow.category) }}</span>
+                            <span class="badge badge-neutral">{{ typeRow.count }}</span>
                         </div>
                     </div>
-                    <p v-else class="text-sm text-base-content/50 py-16 text-center">No data yet.</p>
+                    <p v-else class="text-sm text-base-content/50 py-16 text-center">{{ t('dashboard.noDataYet') }}</p>
                 </div>
             </div>
 
@@ -147,41 +155,41 @@ function typeIcon(category: string) {
                 <div class="glass rounded-lg sm:rounded-xl p-3 sm:p-4">
                     <h2 class="font-semibold mb-4 flex items-center gap-2 flex-wrap">
                         <Icon icon="mdi:server-outline" class="size-5" />
-                        System health
+                        {{ t('dashboard.systemHealth') }}
                         <span class="badge badge-success badge-sm ml-auto">{{ system.hostname }}</span>
                     </h2>
                     <div class="flex flex-col gap-4">
                         <UsageBar
-                            label="CPU"
+                            :label="t('dashboard.cpu')"
                             :percent="system.cpu.usagePercent"
-                            :detail="`${system.cpu.cores} cores · ${system.cpu.model}`"
+                            :detail="`${system.cpu.cores} ${t('dashboard.cores')} · ${system.cpu.model}`"
                         />
                         <UsageBar
-                            label="Memory"
+                            :label="t('dashboard.memory')"
                             :percent="system.memory.usedPercent"
                             :detail="`${formatBytes(system.memory.usedBytes)} / ${formatBytes(system.memory.totalBytes)}`"
                         />
                         <UsageBar
                             v-if="system.disk.usedPercent !== undefined"
-                            label="Disk"
+                            :label="t('dashboard.disk')"
                             :percent="system.disk.usedPercent"
                             :detail="`${formatBytes(system.disk.usedBytes || 0)} / ${formatBytes(system.disk.totalBytes || 0)}`"
                         />
                         <div class="grid grid-cols-2 gap-3 text-sm mt-2">
                             <div>
-                                <p class="text-base-content/50 text-xs">System uptime</p>
+                                <p class="text-base-content/50 text-xs">{{ t('dashboard.systemUptime') }}</p>
                                 <p class="font-mono">{{ formatUptime(system.uptimeSeconds) }}</p>
                             </div>
                             <div>
-                                <p class="text-base-content/50 text-xs">Backend uptime</p>
+                                <p class="text-base-content/50 text-xs">{{ t('dashboard.backendUptime') }}</p>
                                 <p class="font-mono">{{ formatUptime(system.processUptimeSeconds) }}</p>
                             </div>
                             <div>
-                                <p class="text-base-content/50 text-xs">Node.js</p>
+                                <p class="text-base-content/50 text-xs">{{ t('dashboard.nodeVersion') }}</p>
                                 <p class="font-mono">{{ system.nodeVersion }}</p>
                             </div>
                             <div>
-                                <p class="text-base-content/50 text-xs">Load avg (1m/5m/15m)</p>
+                                <p class="text-base-content/50 text-xs">{{ t('dashboard.loadAverage') }}</p>
                                 <p class="font-mono">{{ system.cpu.loadAverage.map((n) => n.toFixed(2)).join(' / ') }}</p>
                             </div>
                         </div>
@@ -192,31 +200,33 @@ function typeIcon(category: string) {
                 <div class="glass rounded-lg sm:rounded-xl p-3 sm:p-4">
                     <h2 class="font-semibold mb-4 flex items-center gap-2 flex-wrap">
                         <Icon icon="mdi:bucket-outline" class="size-5" />
-                        S3 storage (Neo.id NOS)
-                        <span class="badge badge-info badge-sm ml-auto">live</span>
+                        {{ t('dashboard.s3Storage') }}
+                        <span class="badge badge-info badge-sm ml-auto">{{ t('dashboard.live') }}</span>
                     </h2>
                     <div class="flex flex-col gap-4">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <StatCard
-                                label="Objects in bucket"
+                                :label="t('dashboard.objectsInBucket')"
                                 :value="s3Usage.objectCount"
                                 icon="mdi:file-outline"
                                 color="info"
                             />
                             <StatCard
-                                label="Bytes used"
+                                :label="t('dashboard.bytesUsed')"
                                 :value="formatBytes(s3Usage.totalBytes)"
                                 icon="mdi:harddisk"
                                 color="primary"
                             />
                         </div>
                         <div class="text-sm glass-subtle rounded-md p-3 font-mono break-all">
-                            <p><span class="text-base-content/50">Bucket:</span> {{ s3Usage.bucket }}</p>
-                            <p><span class="text-base-content/50">Prefix:</span> {{ s3Usage.prefix || '(none)' }}</p>
+                            <p><span class="text-base-content/50">{{ t('dashboard.bucket') }}</span> {{ s3Usage.bucket }}</p>
+                            <p>
+                                <span class="text-base-content/50">{{ t('dashboard.prefix') }}</span>
+                                {{ s3Usage.prefix || t('dashboard.none') }}
+                            </p>
                         </div>
                         <p class="text-xs text-base-content/40">
-                            This reflects real objects currently in the bucket under this app's prefix, queried live
-                            from the S3-compatible endpoint - not just local database records.
+                            {{ t('dashboard.s3Note') }}
                         </p>
                     </div>
                 </div>

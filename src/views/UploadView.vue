@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, onMounted, reactive, watch } from 'vue';
+import { computed, inject, onMounted, reactive, watch } from 'vue';
 import { customAlphabet } from 'nanoid';
 import { filesize } from 'filesize';
 import type { VueCookies } from 'vue-cookies';
@@ -13,7 +13,9 @@ import FilePondPluginFileValidateSize from 'filepond-plugin-file-validate-size/d
 
 import Title from '../components/Title.vue';
 import FileCard from '../components/FileCard.vue';
+import { useI18n } from '../i18n';
 
+const { t } = useI18n();
 const FilePond = vueFilePond(FilePondPluginImagePreview, FilePondPluginFileValidateSize);
 const cookies = inject<VueCookies>('$cookies')!;
 const nanoid = customAlphabet('0123456789abcdef', 8);
@@ -67,6 +69,12 @@ onMounted(() => {
         cookies.set(`file_${id}`, files[index]);
     });
 });
+
+// FilePond's label-idle accepts an HTML string; recompute it reactively so
+// switching languages updates the dropzone text without a page reload.
+const dropLabel = computed(
+    () => `${t('upload.dropLabelPrefix')} <span class="filepond--label-action"> ${t('upload.browse')} </span>`,
+);
 </script>
 
 <template>
@@ -82,7 +90,7 @@ onMounted(() => {
                         name="file"
                         ref="pond"
                         :credits="false"
-                        label-idle='Drag &amp; Drop your files or <span class="filepond--label-action"> Browse </span>'
+                        :label-idle="dropLabel"
                         :allow-multiple="true"
                         :allow-browse="true"
                         :allow-remove="true"
@@ -99,14 +107,14 @@ onMounted(() => {
             <div class="glass glass-hover font-fira_code rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col gap-2">
                 <FileCard v-if="files.length" v-for="file in files" v-bind="file" />
                 <p v-if="files.length" class="text-xs py-2 border-t border-dashed border-white/15">
-                    These file lists are saved to local cookies. You can't see it on another browser or computer.
+                    {{ t('upload.cookieNotice') }}
                 </p>
                 <div
                     v-if="!files.length"
                     class="h-full flex flex-col gap-2 py-8 sm:py-6 align-middle items-center justify-center border-2 border-dashed border-white/15 rounded-md sm:rounded-lg"
                 >
                     <Icon class="size-10 sm:size-12" icon="mdi:file-outline" />
-                    Files you upload will appear here
+                    {{ t('upload.emptyState') }}
                 </div>
             </div>
         </div>
