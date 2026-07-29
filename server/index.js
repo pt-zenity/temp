@@ -6,6 +6,9 @@ import multer from 'multer';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { nanoid } from 'nanoid';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { insertUpload, getUploadById, incrementDownloadCount, logActivity } from './src/db.js';
 import { buildKey, putObject, checkBucketAccess, getObject } from './src/s3.js';
@@ -17,9 +20,19 @@ import { getClientIp, getRateLimitKey, buildContentDisposition, isUnsafeInlineCo
 const PORT = Number(process.env.PORT || 3001);
 const DEFAULT_EXPIRE_SECONDS = Number(process.env.DEFAULT_EXPIRE_SECONDS || 3600);
 const MAX_EXPIRE_SECONDS = Number(process.env.MAX_EXPIRE_SECONDS || 172800);
-const MAX_FILE_SIZE_BYTES = Number(process.env.MAX_FILE_SIZE_BYTES || 100 * 1024 * 1024);
+// Default: 50 GiB (53,687,091,200 bytes). Files this large are far too big
+// to safely buffer in RAM, so uploads are streamed straight to a scratch
+// file on disk (see UPLOAD_TMP_DIR below) and from there streamed into S3
+// via a multipart upload (see src/s3.js) - the process's memory footprint
+// stays flat regardless of file size.
+const MAX_FILE_SIZE_BYTES = Number(process.env.MAX_FILE_SIZE_BYTES || 50 * 1024 * 1024 * 1024);
 const CLEANUP_INTERVAL_MS = Number(process.env.CLEANUP_INTERVAL_MS || 60_000);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+// Scratch directory for in-flight uploads before they're streamed to S3.
+// Defaults to a subfolder under the OS temp dir; can be pointed at a
+// larger/faster disk via UPLOAD_TMP_DIR if needed for very large files.
+const UPLOAD_TMP_DIR = process.env.UPLOAD_TMP_DIR || path.join(os.tmpdir(), 'tmpfup-uploads');
+fs.mkdirSync(UPLOAD_TMP_DIR, { recursive: true });
 
 // Admin API routes carry a credentialed session cookie, so they must NEVER
 // be served with a reflected wildcard origin (Access-Control-Allow-Origin:
@@ -96,8 +109,17 @@ const uploadLimiter = rateLimit({
     message: { status: 'error', message: 'Too many uploads from this IP. Please slow down.' },
 });
 
+// Disk storage (not memoryStorage!) - with a 50 GiB default limit, buffering
+// an entire upload in RAM before forwarding it to S3 would let a single
+// large upload exhaust the server's memory and take the whole process down.
+// Writing to a local scratch file instead keeps memory usage flat no
+// matter the file size; the file is streamed on to S3 and always deleted
+// afterwards (success or failure - see the finally block below).
 const upload = multer({
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+        destination: UPLOAD_TMP_DIR,
+        filename: (_req, _file, cb) => cb(null, nanoid(24)),
+    }),
     limits: { fileSize: MAX_FILE_SIZE_BYTES },
 });
 
@@ -115,6 +137,20 @@ app.use('/api/admin', adminRouter);
 // ({"status":"success","data":{"url": "..."}}) so the existing Vue frontend
 // (App.vue / FileCard.vue) needs no changes beyond pointing at this URL.
 app.post('/api/upload', uploadLimiter, upload.single('file'), async (req, res) => {
+    // Always clean up the local scratch file once we're done with it,
+    // whether the upload to S3 succeeded, failed, or the request body
+    // itself was rejected by multer - large files must never accumulate
+    // on local disk across requests.
+    const cleanupTmpFile = () => {
+        if (req.file?.path) {
+            fs.unlink(req.file.path, (err) => {
+                if (err && err.code !== 'ENOENT') {
+                    console.error(`[upload] failed to remove scratch file ${req.file.path}:`, err);
+                }
+            });
+        }
+    };
+
     try {
         if (!req.file) {
             return res.status(400).json({ status: 'error', message: 'No file provided (field name must be "file").' });
@@ -131,11 +167,14 @@ app.post('/api/upload', uploadLimiter, upload.single('file'), async (req, res) =
         const id = nanoid(10);
         const key = buildKey(id, req.file.originalname || 'file');
 
+        // Stream the scratch file straight into S3 via a multipart upload
+        // (see src/s3.js) instead of loading it into memory - this is what
+        // makes multi-gigabyte uploads viable without ballooning RSS.
+        const readStream = fs.createReadStream(req.file.path);
         await putObject({
             key,
-            body: req.file.buffer,
+            body: readStream,
             contentType: req.file.mimetype,
-            contentLength: req.file.size,
         });
 
         const now = new Date();
@@ -169,6 +208,8 @@ app.post('/api/upload', uploadLimiter, upload.single('file'), async (req, res) =
             return res.status(413).json({ status: 'error', message: 'File too large.' });
         }
         res.status(500).json({ status: 'error', message: 'Upload failed.' });
+    } finally {
+        cleanupTmpFile();
     }
 });
 
@@ -279,6 +320,13 @@ app.use((err, req, res, _next) => {
     if (err?.type === 'entity.too.large') {
         return res.status(413).json({ status: 'error', message: 'Request body too large.' });
     }
+    // multer's own upload-size guard rejects with this specific error code
+    // *before* our route handler runs, so it never reaches that handler's
+    // own try/catch - it lands here instead. multer already deletes the
+    // partial scratch file itself in this case (storage._removeFile).
+    if (err?.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ status: 'error', message: 'File too large.' });
+    }
     if (err?.message === 'Not allowed by CORS') {
         return res.status(403).json({ status: 'error', message: 'Origin not allowed.' });
     }
@@ -310,6 +358,16 @@ async function main() {
     httpServer = app.listen(PORT, '0.0.0.0', () => {
         console.log(`[startup] /tmp/fup backend listening on http://0.0.0.0:${PORT}`);
     });
+
+    // Node's default requestTimeout (5 min) and headersTimeout (60s) are
+    // tuned for typical JSON APIs, not multi-gigabyte file transfers - a
+    // 50 GiB upload/download can easily take well over 5 minutes on a
+    // modest connection and would otherwise be aborted partway through.
+    // requestTimeout=0 disables it entirely; headersTimeout is kept modest
+    // since only the initial headers (not the body) need to arrive quickly.
+    httpServer.requestTimeout = 0;
+    httpServer.headersTimeout = 120_000;
+    httpServer.keepAliveTimeout = 120_000;
 }
 
 // Graceful shutdown: stop accepting new connections and let in-flight

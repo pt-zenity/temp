@@ -1,11 +1,11 @@
 import {
     S3Client,
-    PutObjectCommand,
     DeleteObjectCommand,
     GetObjectCommand,
     HeadBucketCommand,
     ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const {
@@ -47,16 +47,33 @@ export function buildKey(id, originalName) {
     return `${PREFIX}${id}-${safeName}`;
 }
 
-export async function putObject({ key, body, contentType, contentLength }) {
-    await s3.send(
-        new PutObjectCommand({
+// Uses the S3 multipart upload API (via @aws-sdk/lib-storage's Upload
+// helper) rather than a single PutObjectCommand. This lets `body` be a
+// Node readable stream instead of a fully-buffered Buffer, so uploads of
+// tens of gigabytes never need to be held entirely in memory at once -
+// each ~8 MiB part is streamed, uploaded, and released independently.
+// Falls back gracefully to a plain in-memory Buffer body too (still works
+// for small files / tests that pass one directly).
+export async function putObject({ key, body, contentType }) {
+    // Note: ContentLength is deliberately NOT passed here - lib-storage's
+    // Upload determines/streams part sizes itself, and supplying a
+    // total ContentLength alongside a streamed multipart body can conflict
+    // with what the S3-compatible endpoint expects per part.
+    const upload = new Upload({
+        client: s3,
+        params: {
             Bucket: BUCKET,
             Key: key,
             Body: body,
             ContentType: contentType || 'application/octet-stream',
-            ContentLength: contentLength,
-        })
-    );
+        },
+        // 8 MiB parts, up to 4 concurrent part uploads - a reasonable
+        // balance between memory footprint and throughput for very large
+        // (multi-GB) files on typical VPS bandwidth.
+        partSize: 8 * 1024 * 1024,
+        queueSize: 4,
+    });
+    await upload.done();
 }
 
 export async function deleteObject(key) {

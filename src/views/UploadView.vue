@@ -22,9 +22,9 @@ const nanoid = customAlphabet('0123456789abcdef', 8);
 
 // Self-hosted backend (see /server) enforces the real limit server-side via
 // MAX_FILE_SIZE_BYTES in its .env. Passing a raw byte count here (rather
-// than a "100MB" string) avoids FilePond's string parser applying a
+// than a "50GB" string) avoids FilePond's string parser applying a
 // 1000-based multiplier that would silently under-report the real limit.
-const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 104,857,600 bytes (100 MiB)
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 * 1024; // 53,687,091,200 bytes (50 GiB)
 
 // Same-origin API path. Nginx proxies /api/* and /f/* to the Node backend
 // (see deploy/nginx-tempfile.xyz.conf), so this works both in dev

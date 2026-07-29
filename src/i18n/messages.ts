@@ -8,7 +8,7 @@ export const messages = {
         title: {
             tagline1: 'Temporary file upload.',
             tagline2: 'Files automatically deleted after 1 hour.',
-            maxSize: 'Maximum file size is 100 MiB (104,857,600 bytes).',
+            maxSize: 'Maximum file size is 50 GiB (53,687,091,200 bytes).',
         },
         upload: {
             dropLabelPrefix: 'Drag & Drop your files or',
@@ -158,7 +158,7 @@ export const messages = {
         title: {
             tagline1: 'Unggah file sementara.',
             tagline2: 'File otomatis terhapus setelah 1 jam.',
-            maxSize: 'Ukuran file maksimum 100 MiB (104.857.600 byte).',
+            maxSize: 'Ukuran file maksimum 50 GiB (53.687.091.200 byte).',
         },
         upload: {
             dropLabelPrefix: 'Tarik & lepas file Anda atau',
