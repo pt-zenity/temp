@@ -1,0 +1,116 @@
+/* Fonts */
+@import url('https://fonts.googleapis.com/css2?family=VT323:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400&display=swap');
+
+/* Tailwind reset */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+    min-height: 100%;
+}
+
+body {
+    position: relative;
+    background-color: #030304;
+    overflow-x: hidden;
+}
+
+/* Ambient animated gradient blobs that sit behind everything so the
+   glassmorphism panels (backdrop-filter: blur) have something colorful
+   and soft to blur - without this, "glass" panels just look grey. */
+body::before {
+    content: '';
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    background:
+        radial-gradient(circle at 15% 20%, rgba(99, 102, 241, 0.35), transparent 42%),
+        radial-gradient(circle at 85% 12%, rgba(236, 72, 153, 0.28), transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.25), transparent 45%),
+        radial-gradient(circle at 92% 90%, rgba(59, 130, 246, 0.22), transparent 42%);
+    filter: blur(60px) saturate(150%);
+    pointer-events: none;
+    animation: glass-drift 24s ease-in-out infinite alternate;
+}
+
+@keyframes glass-drift {
+    0% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    100% {
+        transform: translate3d(-3%, 3%, 0) scale(1.1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body::before {
+        animation: none;
+    }
+}
+
+#app {
+    max-width: 130vh;
+    margin: 0 auto;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+@media (min-width: 768px) {
+    #app {
+        padding: 2rem;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Glassmorphism utility classes                                      */
+/* Shared "frosted glass" look reused across the public upload page   */
+/* and the admin panel: translucent background + backdrop blur +      */
+/* subtle border/inner highlight + soft shadow.                       */
+/* ------------------------------------------------------------------ */
+.glass,
+.glass-strong,
+.glass-subtle {
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.glass-strong {
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-subtle {
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.glass-hover {
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.glass-hover:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Fallback for browsers without backdrop-filter support: fall back to a
+   slightly more opaque flat panel instead of a see-through, unreadable one. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass,
+    .glass-strong,
+    .glass-subtle {
+        background: rgba(20, 20, 24, 0.92);
+    }
+}

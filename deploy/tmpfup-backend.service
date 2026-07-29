@@ -1,0 +1,48 @@
+[Unit]
+Description=/tmp/fup self-hosted backend (S3 upload + expiry API)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tmpfup-backend
+ExecStart=/usr/bin/node /opt/tmpfup-backend/index.js
+Restart=always
+RestartSec=3
+# Runs as a dedicated, unprivileged system account (not root). This process
+# only needs to: bind to a high port (3001, no CAP_NET_BIND_SERVICE
+# required), read its own code/.env, and read+write its own sqlite data
+# dir - none of that needs root. See deploy/README.md for the one-time
+# `useradd`/`chown` setup this expects on the host.
+User=tmpfup
+Group=tmpfup
+Environment=NODE_ENV=production
+
+# ── Sandboxing (systemd hardening) ──────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tmpfup-backend/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+# NOTE: MemoryDenyWriteExecute is intentionally NOT set here. Node's V8
+# engine JIT-compiles JavaScript at runtime, which requires allocating
+# writable-then-executable memory pages - a hard, well-documented
+# incompatibility with this systemd directive (the process fails to start,
+# or crashes on first JIT compilation, with SIGSYS/EPERM from seccomp).
+# Enabling it would take the whole site down.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+StandardOutput=append:/var/log/tmpfup-backend.log
+StandardError=append:/var/log/tmpfup-backend.error.log
+
+[Install]
+WantedBy=multi-user.target

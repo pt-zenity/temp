@@ -1,0 +1,74 @@
+<script lang="ts" setup>
+import { Icon } from '@iconify/vue';
+import { computed } from 'vue';
+import { useI18n } from '../i18n';
+
+const { t, locale } = useI18n();
+
+const props = defineProps<{
+    url: string;
+    fileName: string;
+    fileSize: unknown;
+    fileType: string;
+    expiredAt: string;
+}>();
+
+const expiredAfter = computed(() => {
+    const minute = Math.floor((Number(new Date(props.expiredAt)) - Date.now()) / 60 / 1000);
+
+    if (locale.value === 'id') return `${minute} menit`;
+    return `${minute} minute${minute > 1 ? 's' : ''}`;
+});
+
+function injectDownloadPath(originalUrl: string): string {
+    try {
+        const url = new URL(originalUrl);
+        const pathSegments = url.pathname.split('/').filter((segment) => segment.length > 0);
+        pathSegments.unshift('dl');
+        url.pathname = '/' + pathSegments.join('/');
+
+        return url.href;
+    } catch (error) {
+        console.error('Invalid URL provided:', originalUrl);
+        return originalUrl;
+    }
+}
+</script>
+
+<template>
+    <div class="glass-subtle glass-hover rounded-md sm:rounded-lg w-full border-2 border-dotted border-white/15">
+        <div
+            class="flex flex-row align-middle items-center justify-between gap-2 px-2 sm:px-3 py-2 text-base sm:text-lg lg:text-base text-left font-medium text-ellipsis break-all truncate"
+        >
+            <div class="flex align-middle items-center gap-2 truncate">
+                <div class="size-6 sm:size-7 shrink-0">
+                    <img
+                        v-if="fileType === 'image/jpeg' || fileType === 'image/png'"
+                        :src="injectDownloadPath(url)"
+                        class="size-6 sm:size-7 rounded"
+                        alt="File preview"
+                    />
+                    <Icon v-else class="size-6 sm:size-7" icon="mdi:file-outline" />
+                </div>
+                <div class="truncate">
+                    <p class="truncate">{{ fileName }}</p>
+                    <div class="flex gap-2 sm:gap-4">
+                        <p class="text-clip text-xs hidden md:block">{{ fileType }}</p>
+                        <p class="text-clip text-xs">{{ fileSize }}</p>
+                        <p class="truncate text-xs">
+                            <span class="hidden md:inline">{{ t('fileCard.expiresIn') }}</span> {{ expiredAfter }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex shrink-0">
+                <a class="btn btn-sm btn-ghost" :href="injectDownloadPath(url)" target="_blank">
+                    <Icon class="size-4" icon="material-symbols:download" />
+                </a>
+                <a class="btn btn-sm btn-ghost" :href="url" target="_blank">
+                    <Icon class="size-4" icon="majesticons:open-line" />
+                </a>
+            </div>
+        </div>
+    </div>
+</template>

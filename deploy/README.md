@@ -1,0 +1,200 @@
+# Deployment: tempfile.xyz on VPS (103.253.27.32)
+
+This app is now **fully self-hosted**, consisting of two deployed pieces:
+
+1. **Frontend** — a static Vue build served directly by **nginx** (not via
+   `vite preview`, which is a dev-only server, not meant for production).
+2. **Backend** — a Node.js/Express API (`server/`) running as a permanent
+   **systemd service**, which handles file uploads and stores them in an
+   **S3-compatible bucket** (Neo.id NOS) instead of any third-party upload
+   API. Nginx reverse-proxies `/api/`, `/f/`, and `/dl/` to this backend.
+
+```
+Browser ── https://tempfile.xyz ──▶ nginx
+                                     ├─ static files (SPA) ──▶ /var/www/tempfile.xyz/
+                                     └─ /api/, /f/, /dl/ ──▶ 127.0.0.1:3001 (Node/Express)
+                                                                   │
+                                                                   ├─ SQLite (upload metadata + TTL)
+                                                                   └─ S3-compatible bucket (Neo.id NOS)
+```
+
+## Layout
+
+| Path | Purpose |
+|---|---|
+| `/var/www/tempfile.xyz/` | Web root — synced from `dist/` after each build |
+| `/opt/tmpfup-backend/` | Backend deployment — synced from `server/` (excludes `node_modules`, `data/`, `.env`); real `.env` lives only here, never in git |
+| `/etc/systemd/system/tmpfup-backend.service` | Runs the backend permanently, auto-restarts on crash/reboot (copy in `deploy/tmpfup-backend.service`) |
+| `/etc/nginx/sites-available/tempfile.xyz` | Nginx vhost config — serves the SPA and proxies `/api/`, `/f/`, `/dl/` to the backend (copy in `deploy/nginx-tempfile.xyz.conf`) |
+| `/usr/local/bin/setup-ssl-tempfile.sh` | One-shot Let's Encrypt cert issuance (copy in `deploy/setup-ssl-tempfile.sh`) |
+| `/etc/systemd/system/tempfile-ssl-retry.{service,timer}` | Auto-retries cert issuance every 15 min until DNS propagates, then self-disables (disabled now that the cert is live) |
+
+## S3 storage backend
+
+Uploaded files are stored in an S3-compatible bucket rather than on local
+disk, so the app has no growing local storage footprint and can scale
+independently of the VPS disk:
+
+| Setting | Value |
+|---|---|
+| Endpoint | `https://nos.jkt-1.neo.id` (Neo.id NOS, S3-compatible) |
+| Region | `jkt-1` |
+| Bucket | `zti` (⚠️ shared with other unrelated apps/backups on this VPS) |
+| Key prefix | `tmpfup/` (keeps this app's objects isolated inside the shared bucket) |
+| Access mode | Bucket is **private**; downloads are served via short-lived (5 min) presigned URLs generated on demand — never made public |
+
+Real credentials live only in `/opt/tmpfup-backend/.env` (and locally in
+`server/.env` for dev) — both are gitignored and must never be committed.
+See `server/.env.example` for the full list of configuration options
+(expiry limits, max file size, cleanup interval, etc.) and `server/README.md`
+for backend API details.
+
+## Redeploying after code changes
+
+```bash
+bash deploy/deploy.sh              # deploys frontend AND backend
+bash deploy/deploy.sh --skip-backend   # frontend only (faster, e.g. UI-only changes)
+```
+
+This runs `npm run build`, rsyncs `dist/` to `/var/www/tempfile.xyz/`, and
+reloads nginx. Unless `--skip-backend` is passed, it also rsyncs `server/`
+to `/opt/tmpfup-backend/` (excluding `node_modules`, `data/`, `.env`),
+runs `npm install --omit=dev` there, and restarts
+`tmpfup-backend.service` via systemd.
+
+**Note:** `/opt/tmpfup-backend/.env` is never overwritten by this script —
+it must be created/updated manually on the VPS the first time (or whenever
+S3 credentials or other backend config changes), based on
+`server/.env.example`.
+
+## Admin panel
+
+A full admin panel lives at `/admin` (e.g. `https://tempfile.xyz/admin`),
+protected by a username/password login (bcrypt + JWT session cookie).
+
+Required `.env` additions on top of the S3 config above:
+
+```
+NODE_ENV=production
+ADMIN_JWT_SECRET=<long random hex, e.g. via:
+  node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=<strong password - only used to bootstrap the FIRST admin
+  account; ignored afterwards, change the password from inside the panel>
+```
+
+**These vars must be added to `/opt/tmpfup-backend/.env` manually** —
+`deploy.sh` never touches `.env`. If the backend fails to start after a
+fresh deploy, check `journalctl -u tmpfup-backend.service` first; a missing
+`ADMIN_JWT_SECRET` or `ADMIN_PASSWORD` (on first boot) will make it exit
+immediately.
+
+## Security hardening (backend + infra)
+
+The backend runs as a **dedicated unprivileged system user** (`tmpfup`),
+not root — **applied and verified live** on the VPS. One-time setup that was
+run before installing the hardened `tmpfup-backend.service`:
+
+```bash
+useradd --system --no-create-home --shell /usr/sbin/nologin tmpfup
+chown -R tmpfup:tmpfup /opt/tmpfup-backend
+chown tmpfup:tmpfup /var/log/tmpfup-backend.log /var/log/tmpfup-backend.error.log
+```
+
+(If re-provisioning this app on a fresh VPS, run the same three commands
+before `systemctl restart tmpfup-backend.service` — otherwise the service
+will fail to start under the new `User=tmpfup` because it won't have
+permission to read its own code/`.env` or write to `data/`.)
+
+**Note on `MemoryDenyWriteExecute`**: this systemd directive is deliberately
+**not** enabled, even though it's a common hardening recommendation. Node's
+V8 engine JIT-compiles JavaScript at runtime, which requires allocating
+memory pages that are writable and then made executable — exactly what this
+directive blocks via seccomp. Enabling it makes the process fail to start
+(or crash on first JIT compilation). All other applicable sandboxing
+directives (`ProtectSystem=strict`, `ProtectHome`, `RestrictNamespaces`,
+`LockPersonality`, an emptied capability set, etc.) are enabled and have
+been confirmed compatible — the service starts cleanly and file
+upload/download, S3 access, SQLite read/write, and admin login all work
+correctly under this profile.
+
+Other hardening baked into the app/infra (see commit history for the full
+list):
+- CORS is split by route: the public upload/download API allows any origin
+  (no cookies involved, intentional for a public tool), while `/api/admin/*`
+  never reflects a wildcard origin alongside credentials — it only allows
+  cookie-carrying cross-origin requests from an explicit `CORS_ORIGIN`
+  allowlist (same-origin requests always work regardless).
+- `helmet` security headers on every API response; nginx adds HSTS,
+  `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and a
+  `frame-ancestors` CSP directive on every response for the site.
+- Uploaded files with an actively-renderable content type (HTML, SVG,
+  JS, XML, etc.) are always served as a forced, non-executable attachment
+  — never inline with their original content type — closing a stored-XSS
+  vector on the app's own origin.
+- `Content-Disposition` filenames are sanitized against header-injection
+  characters (CR/LF/control chars), not just double quotes.
+- Rate limiting keys off Cloudflare's `CF-Connecting-IP` header (falls back
+  to Express's computed IP) instead of a spoofable `X-Forwarded-For`, and
+  now also covers admin `change-password` / file-delete routes, not just
+  login/upload.
+- Centralized Express error handler catches malformed JSON bodies, oversized
+  payloads, and any other unhandled error with a clean JSON response instead
+  of a raw stack trace; graceful `SIGTERM`/`SIGINT` shutdown lets in-flight
+  downloads finish before the process exits (important for zero-downtime
+  redeploys/restarts).
+- bcrypt cost factor raised to 12; JWT verification pins the `HS256`
+  algorithm explicitly.
+- systemd unit sandboxed with `ProtectSystem=strict`, `ProtectHome`,
+  `RestrictNamespaces`, `LockPersonality`, an empty capability set, and more
+  (see `tmpfup-backend.service`) — running as the unprivileged `tmpfup`
+  user instead of root, applied and verified live.
+
+Panel features: live CPU/RAM/disk + Node uptime, real S3 bucket usage
+(queried live from Neo.id NOS, not just local DB), upload trend chart,
+file-type breakdown, paginated/searchable file manager with manual delete,
+and a full activity log (logins, uploads, deletions, password changes).
+See `server/README.md` for the full admin API reference.
+
+## DNS
+
+`tempfile.xyz` was registered 2026-07-28 via Hostinger, using Cloudflare
+nameservers (`amit.ns.cloudflare.com`, `dee.ns.cloudflare.com`) with the
+Cloudflare proxy (orange cloud) enabled. The A record points to this VPS
+(`103.253.27.32`), but public clients actually connect to Cloudflare's edge
+IPs (e.g. `104.21.x.x`, `172.67.x.x`), which then proxy to the origin server.
+DNS/NS delegation from the `.xyz` registry took a short time to propagate to
+public resolvers after same-day registration — this is normal.
+
+## SSL
+
+Let's Encrypt certificate for `tempfile.xyz` + `www.tempfile.xyz` was issued
+successfully via `certbot --nginx` once DNS had propagated. Certbot also
+added the `listen 443 ssl` server block and the HTTP→HTTPS redirect to the
+nginx vhost automatically (see `nginx-tempfile.xyz.conf` in this directory
+for the resulting config), and registered its own renewal timer
+(`certbot renew` via systemd, checked twice daily).
+
+The one-shot retry helper (`setup-ssl-tempfile.sh` /
+`tempfile-ssl-retry.service` + `.timer`) is kept here for reference / reuse
+if the cert ever needs to be re-obtained from scratch (e.g. after a domain
+change), but the timer has been disabled now that the cert is live.
+
+Check cert status: `certbot certificates`
+
+**Note on the Cloudflare proxy + certbot interaction**: because Cloudflare
+proxies to origin over HTTPS by default ("Full" SSL mode), the nginx vhost
+for `tempfile.xyz` MUST have its own `listen 443 ssl` block with a valid
+certificate. Without it, HTTPS requests reaching this VPS with no matching
+SNI/server_name on port 443 fall through to nginx's `default_server` block
+(here, an unrelated app), serving the wrong content over HTTPS while HTTP
+still worked correctly. Always run certbot (or otherwise add a 443 listener)
+for any new Cloudflare-proxied domain added to this VPS.
+
+## Verifying
+
+```bash
+curl -I -H "Host: tempfile.xyz" http://127.0.0.1/   # local vhost test, works immediately
+curl -I http://tempfile.xyz/                         # 301 -> https, once DNS propagates
+curl -I https://tempfile.xyz/                        # 200, once SSL cert is issued
+```

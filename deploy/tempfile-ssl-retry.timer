@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry SSL cert issuance for tempfile.xyz every 15 minutes until DNS propagates
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
