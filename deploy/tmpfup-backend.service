@@ -32,7 +32,12 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# NOTE: MemoryDenyWriteExecute is intentionally NOT set here. Node's V8
+# engine JIT-compiles JavaScript at runtime, which requires allocating
+# writable-then-executable memory pages - a hard, well-documented
+# incompatibility with this systemd directive (the process fails to start,
+# or crashes on first JIT compilation, with SIGSYS/EPERM from seccomp).
+# Enabling it would take the whole site down.
 CapabilityBoundingSet=
 AmbientCapabilities=
 

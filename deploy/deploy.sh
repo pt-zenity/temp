@@ -28,6 +28,9 @@ if [ "$1" != "--skip-backend" ]; then
     echo "==> Installing backend production dependencies ..."
     (cd "$BACKEND_DIR" && npm install --omit=dev)
 
+    echo "==> Re-applying tmpfup ownership (backend runs as this unprivileged user, not root) ..."
+    chown -R tmpfup:tmpfup "$BACKEND_DIR"
+
     echo "==> Restarting backend service ..."
     systemctl restart tmpfup-backend.service
     sleep 1

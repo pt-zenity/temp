@@ -92,12 +92,31 @@ immediately.
 ## Security hardening (backend + infra)
 
 The backend runs as a **dedicated unprivileged system user** (`tmpfup`),
-not root. One-time setup on the VPS before applying `tmpfup-backend.service`:
+not root — **applied and verified live** on the VPS. One-time setup that was
+run before installing the hardened `tmpfup-backend.service`:
 
 ```bash
 useradd --system --no-create-home --shell /usr/sbin/nologin tmpfup
 chown -R tmpfup:tmpfup /opt/tmpfup-backend
+chown tmpfup:tmpfup /var/log/tmpfup-backend.log /var/log/tmpfup-backend.error.log
 ```
+
+(If re-provisioning this app on a fresh VPS, run the same three commands
+before `systemctl restart tmpfup-backend.service` — otherwise the service
+will fail to start under the new `User=tmpfup` because it won't have
+permission to read its own code/`.env` or write to `data/`.)
+
+**Note on `MemoryDenyWriteExecute`**: this systemd directive is deliberately
+**not** enabled, even though it's a common hardening recommendation. Node's
+V8 engine JIT-compiles JavaScript at runtime, which requires allocating
+memory pages that are writable and then made executable — exactly what this
+directive blocks via seccomp. Enabling it makes the process fail to start
+(or crash on first JIT compilation). All other applicable sandboxing
+directives (`ProtectSystem=strict`, `ProtectHome`, `RestrictNamespaces`,
+`LockPersonality`, an emptied capability set, etc.) are enabled and have
+been confirmed compatible — the service starts cleanly and file
+upload/download, S3 access, SQLite read/write, and admin login all work
+correctly under this profile.
 
 Other hardening baked into the app/infra (see commit history for the full
 list):
@@ -127,8 +146,9 @@ list):
 - bcrypt cost factor raised to 12; JWT verification pins the `HS256`
   algorithm explicitly.
 - systemd unit sandboxed with `ProtectSystem=strict`, `ProtectHome`,
-  `MemoryDenyWriteExecute`, an empty capability set, and more (see
-  `tmpfup-backend.service`).
+  `RestrictNamespaces`, `LockPersonality`, an empty capability set, and more
+  (see `tmpfup-backend.service`) — running as the unprivileged `tmpfup`
+  user instead of root, applied and verified live.
 
 Panel features: live CPU/RAM/disk + Node uptime, real S3 bucket usage
 (queried live from Neo.id NOS, not just local DB), upload trend chart,
